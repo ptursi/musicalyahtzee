@@ -12,9 +12,9 @@ body {
     max-width: 600px;
     margin: 50px auto;
     padding: 20px;
-    background: rgba(255, 255, 255, 0.8); /* Slightly transparent background to see the image */
+    background: rgba(255, 255, 255, 0.8);
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    border-radius: 10px; /* Added border radius for better aesthetics */
+    border-radius: 10px;
 }
 
 .dice-container {
@@ -89,4 +89,27 @@ button {
 #rollsLeft {
     font-size: 18px;
     font-weight: bold;
+}
+
+.options {
+    margin-top: 20px;
+}
+
+.options label {
+    display: block;
+    margin: 10px 0;
+}
+
+.dice-number-options, .player-number-options {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.dice-number-options label, .player-number-options label {
+    margin: 0 10px;
+}
+
+.player-info {
+    margin-top: 20px;
 }
