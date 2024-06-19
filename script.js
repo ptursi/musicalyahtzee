@@ -22,8 +22,8 @@ const chordIntervals = {
     "Dominant 9": [[0, 2, 4, 7, 10], [0, 2, 5, 8, 10], [0, 3, 6, 8, 10], [0, 3, 5, 7, 9], [0, 2, 4, 6, 9]],
     "Dominant #9": [[0, 3, 4, 7, 10], [0, 1, 4, 7, 9], [0, 3, 6, 8, 11], [0, 3, 5, 8, 9], [0, 2, 5, 6, 9]],
     "Pentatonic Scale": [[0, 3, 5, 7, 10], [0, 2, 4, 7, 9], [0, 2, 5, 7, 10], [0, 3, 5, 8, 10], [0, 2, 5, 7, 9]],
-    "Chromatic Scale": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 11], [0, 1, 2, 10, 11], [0, 1, 9, 10, 11], [0, 8, 9, 10, 11]],
-    "Whole Step Series": [[0, 2, 4, 6, 8], [0, 2, 4, 6, 10], [0, 2, 4, 8, 10], [0, 2, 6, 8, 10], [0, 4, 6, 8, 10]]
+    "Whole Step Series": [[0, 2, 4, 6, 8], [0, 2, 4, 6, 10], [0, 2, 4, 8, 10], [0, 2, 6, 8, 10], [0, 4, 6, 8, 10]],
+    "Chromatic Scale": [[0, 1, 2, 3, 4], [0, 1, 2, 3, 11], [0, 1, 2, 10, 11], [0, 1, 9, 10, 11], [0, 8, 9, 10, 11]]
 };
 
 const noteValues = {
@@ -49,8 +49,8 @@ const chordPoints = {
     "Dominant 9": 100,
     "Dominant #9": 100,
     "Pentatonic Scale": 100,
-    "Chromatic Scale": 100,
-    "Whole Step Series": 100
+    "Whole Step Series": 200, // Updated order
+    "Chromatic Scale": 300 // Updated order
 };
 
 let diceFaces = [...allDiceFaces];
@@ -60,6 +60,9 @@ let currentPlayer = 0;
 let numberOfPlayers = 2;
 let playerScores = new Array(numberOfPlayers).fill(0);
 let playerNames = Array.from({ length: numberOfPlayers }, (_, i) => `Player ${i + 1}`);
+let turnCounter = 1;
+let gameStarted = false;
+let confirmAction = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     const diceContainer = document.querySelector('.dice-container');
@@ -88,6 +91,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const currentPlayerDisplay = document.getElementById('currentPlayer');
     const playerScoresDisplay = document.getElementById('playerScores');
     const playerNamesContainer = document.getElementById('playerNamesContainer');
+    const turnCounterDisplay = document.getElementById('turnCounter');
+
+    const mainMenuButton = document.getElementById('mainMenuButton');
+    const mainMenuDropdown = document.getElementById('mainMenuDropdown');
+
+    const modal = document.getElementById('confirmationModal');
+    const closeModalButton = document.getElementById('closeModal');
+    const confirmButton = document.getElementById('confirmButton');
+    const cancelButton = document.getElementById('cancelButton');
+    const modalMessage = document.getElementById('modalMessage');
+
+    mainMenuButton.addEventListener('click', () => {
+        mainMenuDropdown.style.display = mainMenuDropdown.style.display === 'block' ? 'none' : 'block';
+    });
+
+    // Close the dropdown menu if clicked outside
+    document.addEventListener('click', (event) => {
+        const isClickInsideMenu = mainMenuButton.contains(event.target) || mainMenuDropdown.contains(event.target);
+        if (!isClickInsideMenu) {
+            mainMenuDropdown.style.display = 'none';
+        }
+    });
+
+    closeModalButton.addEventListener('click', () => {
+        modal.style.display = 'none';
+        confirmAction = null;
+    });
+
+    cancelButton.addEventListener('click', () => {
+        modal.style.display = 'none';
+        confirmAction = null;
+    });
+
+    confirmButton.addEventListener('click', () => {
+        if (confirmAction) confirmAction();
+        modal.style.display = 'none';
+        confirmAction = null;
+    });
+
+    function showModal(message, action) {
+        modalMessage.textContent = message;
+        modal.style.display = 'block';
+        confirmAction = action;
+    }
 
     function createDiceElements() {
         diceContainer.innerHTML = '';
@@ -191,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const idx = event.target.dataset.index;
                 playerNames[idx] = event.target.value;
                 updatePlayerDisplays();
+                updateChordPointsTableHeaders();
             });
             playerNamesContainer.appendChild(input);
         });
@@ -201,7 +249,68 @@ document.addEventListener('DOMContentLoaded', () => {
         playerScoresDisplay.textContent = `Player Scores: ${playerScores.map((score, index) => `${playerNames[index]}: ${score}`).join(', ')}`;
     }
 
+    function lockPlayerInputs() {
+        numberOfPlayersInput.disabled = true;
+        Array.from(playerNamesContainer.getElementsByTagName('input')).forEach(input => input.disabled = true);
+    }
+
+    function unlockPlayerInputs() {
+        numberOfPlayersInput.disabled = false;
+        Array.from(playerNamesContainer.getElementsByTagName('input')).forEach(input => input.disabled = false);
+    }
+
+    function createChordPointsTable() {
+        const table = document.getElementById('chordPointsTable');
+        const thead = table.querySelector('thead tr');
+        thead.innerHTML = '<th>Chord Type</th><th>Points</th>';
+        playerNames.forEach(name => {
+            const th = document.createElement('th');
+            th.textContent = name;
+            thead.appendChild(th);
+        });
+
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+        for (let chord in chordPoints) {
+            const tr = document.createElement('tr');
+            const tdChord = document.createElement('td');
+            tdChord.textContent = chord.replace(/_/g, ' ');
+            tr.appendChild(tdChord);
+            const tdPoints = document.createElement('td');
+            tdPoints.textContent = chordPoints[chord];
+            tr.appendChild(tdPoints);
+            playerNames.forEach(() => {
+                const td = document.createElement('td');
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        }
+    }
+
+    function updateChordPointsTableHeaders() {
+        const table = document.getElementById('chordPointsTable');
+        const thead = table.querySelector('thead tr');
+        for (let i = 2; i < thead.children.length; i++) {
+            thead.children[i].textContent = playerNames[i - 2];
+        }
+    }
+
+    function updateChordPointsTable(chord, playerIndex) {
+        const table = document.getElementById('chordPointsTable');
+        const rows = table.querySelector('tbody').rows;
+        for (let row of rows) {
+            if (row.cells[0].textContent === chord.replace(/_/g, ' ')) {
+                row.cells[playerIndex + 2].innerHTML = '&#10003;'; // Checkmark symbol
+                break;
+            }
+        }
+    }
+
     rollButton.addEventListener('click', () => {
+        if (!gameStarted) {
+            gameStarted = true;
+            lockPlayerInputs();
+        }
         if (rollsLeft > 0) {
             const diceElements = Array.from(document.getElementsByClassName('dice'));
             diceElements.forEach(dice => {
@@ -226,12 +335,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     resetTurnButton.addEventListener('click', () => {
-        createDiceElements();
-        rollsLeft = 3;
-        updateRollsLeftIndicator();
-        updatePointsAndChords();
-        rollButton.style.display = 'inline-block'; // Show the roll button
-        nextTurnButton.style.display = 'none'; // Hide the next turn button
+        showModal("Are you sure you want to reset the turn?", () => {
+            createDiceElements();
+            rollsLeft = 3;
+            updateRollsLeftIndicator();
+            updatePointsAndChords();
+            rollButton.style.display = 'inline-block'; // Show the roll button
+            nextTurnButton.style.display = 'none'; // Hide the next turn button
+        });
     });
 
     nextTurnButton.addEventListener('click', () => {
@@ -239,16 +350,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const chordPointsValue = chordPoints[chord] || 0;
         const totalTurnPoints = chordPointsValue > 0 ? parseFloat(totalPointsLocked.textContent) + chordPointsValue : 0;
         playerScores[currentPlayer] += totalTurnPoints;
+        updateChordPointsTable(chord, currentPlayer);
         currentPlayer = (currentPlayer + 1) % playerScores.length;
         updatePlayerDisplays();
-        resetTurnButton.click();
+        if (currentPlayer === 0) {
+            turnCounter++;
+            turnCounterDisplay.textContent = `Turn: ${turnCounter}`;
+        }
+        createDiceElements();
+            rollsLeft = 3;
+            updateRollsLeftIndicator();
+            updatePointsAndChords();
+            rollButton.style.display = 'inline-block'; // Show the roll button
+            nextTurnButton.style.display = 'none'; // Hide the next turn button
     });
 
     resetGameButton.addEventListener('click', () => {
-        playerScores.fill(0);
-        currentPlayer = 0;
-        updatePlayerDisplays();
-        resetTurnButton.click();
+        showModal("Are you sure you want to reset the game?", () => {
+            playerScores.fill(0);
+            currentPlayer = 0;
+            turnCounter = 1;
+            turnCounterDisplay.textContent = `Turn: ${turnCounter}`;
+            updatePlayerDisplays();
+            resetTurnButton.click();
+            gameStarted = false;
+            unlockPlayerInputs();
+            createChordPointsTable();
+        });
     });
 
     includeAccidentalsCheckbox.addEventListener('change', () => {
@@ -276,7 +404,13 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPlayer = 0;
         updatePlayerNamesInputs();
         updatePlayerDisplays();
-        resetTurnButton.click();
+        createDiceElements();
+            rollsLeft = 3;
+            updateRollsLeftIndicator();
+            updatePointsAndChords();
+            rollButton.style.display = 'inline-block'; // Show the roll button
+            nextTurnButton.style.display = 'none'; // Hide the next turn button
+        createChordPointsTable();
     });
 
     // Initial setup
@@ -285,4 +419,5 @@ document.addEventListener('DOMContentLoaded', () => {
     updatePointsAndChords();
     updatePlayerNamesInputs();
     updatePlayerDisplays();
+    createChordPointsTable();
 });

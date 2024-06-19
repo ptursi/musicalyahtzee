@@ -2,7 +2,7 @@
 <html lang="en" >
 <head>
   <meta charset="UTF-8">
-  <title>CodePen - Musical Yahtzee 6</title>
+  <title>CodePen - Musical Yahtzee 8</title>
   <link rel="stylesheet" href="./style.css">
 
 </head>
@@ -16,8 +16,23 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="confirmationModal" class="modal">
+    <div class="modal-content">
+        <span class="close-button" id="closeModal">&times;</span>
+        <p id="modalMessage"></p>
+        <button id="confirmButton">Confirm</button>
+        <button id="cancelButton">Cancel</button>
+    </div>
+</div>
+
     <div class="container">
         <h1>Musical Yahtzee</h1>
+        <div class="main-menu">
+            <button id="mainMenuButton">☰ Main Menu</button>
+            <div id="mainMenuDropdown" class="dropdown-content">
+                <button id="resetGame">Reset Game</button>
+            </div>
+        </div>
         <div class="dice-container">
             <div class="dice" id="dice1" data-locked="false"></div>
             <div class="dice" id="dice2" data-locked="false"></div>
@@ -64,7 +79,21 @@
         <div class="player-info">
             <p id="currentPlayer">Current Player: 1</p>
             <p id="playerScores">Player Scores: 0, 0</p>
-            <button id="resetGame">Reset Game</button>
+            <p id="turnCounter">Turn: 1</p>
+        </div>
+        <div class="chord-points-table">
+            <h2>Chord Points Table</h2>
+            <table id="chordPointsTable">
+                <thead>
+                    <tr>
+                        <th>Chord Type</th>
+                        <th>Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Chord rows will be dynamically generated -->
+                </tbody>
+            </table>
         </div>
     </div>
     <script src="script.js"></script>
