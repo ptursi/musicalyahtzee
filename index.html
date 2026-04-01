@@ -124,8 +124,13 @@
                 <input type="checkbox" id="allowRepeatedChordTypes" checked />
                 <span>Allow repeated chord types to score again</span>
               </label>
+              <label class="toggle-row">
+                <input type="checkbox" id="enableRiskMode" checked />
+                <span>Enable risk mode (-5% core points per reroll)</span>
+              </label>
               <p class="setting-help">
                 When this is off, repeating a chord type you already claimed earns 0 points.
+                Risk mode starts after the first roll and adds pressure to stop early.
               </p>
             </section>
 
@@ -181,34 +186,10 @@
                 <span>Enable bonus points</span>
               </label>
               <div id="bonusOptions" class="bonus-option-list">
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusAllTriads" checked />
-                  <span>All 5 triad types (+75)</span>
-                </label>
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusFourSevenths" checked />
-                  <span>4 of 5 featured 7th chords (+90)</span>
-                </label>
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusAllFamilies" checked />
-                  <span>One triad, one 7th, and one extended pattern (+50)</span>
-                </label>
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusExtendedPalette" checked />
-                  <span>3 different 9th or scale patterns (+65)</span>
-                </label>
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusSameTriadFiveTimes" checked />
-                  <span>Same 3-note chord 5 times (+100)</span>
-                </label>
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusSameSeventhFiveTimes" checked />
-                  <span>Same 4-note chord 5 times (+135)</span>
-                </label>
-                <label class="toggle-row">
-                  <input type="checkbox" id="bonusSameExtendedFiveTimes" checked />
-                  <span>Same 5-note chord 5 times (+170)</span>
-                </label>
+                <p class="setting-help">
+                  All bonuses stay hidden until earned. This includes tension bonuses, set bonuses,
+                  and chord-type maestro awards.
+                </p>
               </div>
             </section>
 
