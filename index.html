@@ -7,6 +7,46 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <div class="music-atmosphere" aria-hidden="true">
+      <div class="music-orb orb-one"></div>
+      <div class="music-orb orb-two"></div>
+      <div class="music-orb orb-three"></div>
+    </div>
+
+    <section id="landingScreen" class="landing-screen is-open" aria-labelledby="landingTitle">
+      <div class="landing-card">
+        <p class="eyebrow">A polished music theory dice duel</p>
+        <h1 id="landingTitle">Musical Yahtzee</h1>
+        <p class="landing-copy">
+          Shape chords, chase bonuses, race the timer, and sharpen your ear with every locked
+          note.
+        </p>
+
+        <div class="landing-actions">
+          <button id="launchGameButton" class="button-primary" type="button">Start Setup</button>
+        </div>
+
+        <div class="landing-feature-grid">
+          <article class="landing-feature-card">
+            <h2>Build Harmonies</h2>
+            <p>Roll note dice into triads, 7th chords, scales, and advanced color tones.</p>
+          </article>
+          <article class="landing-feature-card">
+            <h2>Rare Wildcards</h2>
+            <p>Optional wildcard turns let one lucky die retune itself to any legal pitch.</p>
+          </article>
+          <article class="landing-feature-card">
+            <h2>Timed Drama</h2>
+            <p>Turn on a live timer to push fast decisions and high-pressure theory wins.</p>
+          </article>
+          <article class="landing-feature-card">
+            <h2>Train Your Ear</h2>
+            <p>Hear piano-style pitches on lock and connect every note name to its sound.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
     <div id="confirmationModal" class="modal" aria-hidden="true">
       <div class="modal-card">
         <button id="closeModal" class="close-button" type="button" aria-label="Close dialog">
@@ -35,8 +75,8 @@
         <p class="modal-eyebrow">Game setup</p>
         <h2>Musical Yahtzee Settings</h2>
         <p class="modal-copy">
-          Save settings before the first roll. If you change them during a match, the game will ask
-          before starting a fresh one.
+          Save your rules before the first roll. Player names, sound effects, and ear training can
+          update live mid-game, while gameplay rule changes still restart the match.
         </p>
 
         <form id="settingsForm">
@@ -66,14 +106,14 @@
                   <span>5 Dice</span>
                 </label>
               </div>
-              <p class="setting-help">3 favors triads, 4 favors 7th chords, 5 unlocks the largest sets.</p>
+              <p class="setting-help">
+                3 favors triads, 4 favors 7th chords, and 5 unlocks the biggest patterns.
+              </p>
             </section>
 
             <section class="settings-section">
               <h3>Players</h3>
-              <label class="stack-label" for="numberOfPlayers">
-                Number of players
-              </label>
+              <label class="stack-label" for="numberOfPlayers">Number of players</label>
               <input type="number" id="numberOfPlayers" min="1" max="10" value="2" />
               <div id="playerNamesContainer" class="player-name-grid"></div>
             </section>
@@ -85,7 +125,7 @@
                 <span>Allow repeated chord types to score again</span>
               </label>
               <p class="setting-help">
-                When this is off, scoring a chord you already claimed earns 0 for that turn.
+                When this is off, repeating a chord type you already claimed earns 0 points.
               </p>
             </section>
 
@@ -106,6 +146,32 @@
                 <label class="stack-label" for="targetScore">Target score</label>
                 <input type="number" id="targetScore" min="25" max="2000" step="25" value="250" />
               </div>
+            </section>
+
+            <section class="settings-section">
+              <h3>Timed Turns</h3>
+              <label class="toggle-row">
+                <input type="checkbox" id="enableTimedTurns" />
+                <span>Enable a turn timer</span>
+              </label>
+              <div id="timedTurnField" class="stack-field">
+                <label class="stack-label" for="timedTurnSeconds">Seconds per turn</label>
+                <input type="number" id="timedTurnSeconds" min="10" max="180" step="5" value="45" />
+              </div>
+              <p class="setting-help">
+                The timer starts on the first roll and auto-scores when the countdown expires.
+              </p>
+            </section>
+
+            <section class="settings-section">
+              <h3>Wildcard Die</h3>
+              <label class="toggle-row">
+                <input type="checkbox" id="enableWildCardDie" />
+                <span>Enable the rare wildcard die</span>
+              </label>
+              <p class="setting-help">
+                About 1 in 8 turns will feature one die that can be retuned to any allowed note.
+              </p>
             </section>
 
             <section class="settings-section">
@@ -140,8 +206,13 @@
                 <input type="checkbox" id="enableSoundEffects" checked />
                 <span>Enable sound effects</span>
               </label>
+              <label class="toggle-row">
+                <input type="checkbox" id="enableEarTraining" checked />
+                <span>Enable ear training lock notes</span>
+              </label>
               <p class="setting-help">
-                Adds short synth sounds for rolls, locks, bonuses, and wins.
+                Ear training plays a piano-style note from C4-B4 when a die is locked. Unlocking
+                stays silent.
               </p>
             </section>
           </div>
@@ -160,7 +231,7 @@
       <section class="container">
         <header class="game-header">
           <div>
-            <p class="eyebrow">Harmony + strategy</p>
+            <p class="eyebrow">Harmony plus strategy</p>
             <h1>Musical Yahtzee</h1>
             <p class="subtitle">
               Lock notes, build chords, collect theory bonuses, and race to your chosen victory
@@ -170,7 +241,7 @@
 
           <div class="header-actions">
             <button id="quickSettingsButton" class="button-secondary" type="button">
-              Open Settings
+              Settings
             </button>
             <div class="main-menu">
               <button id="mainMenuButton" class="menu-button" type="button">Menu</button>
@@ -222,10 +293,16 @@
               <span>Projected Turn Score</span>
               <strong id="projectedTurnPoints">0</strong>
             </div>
+            <div id="timerMetric" class="metric-card">
+              <span>Turn Timer</span>
+              <strong id="turnTimer">Off</strong>
+              <small id="timerHelper" class="metric-helper">Timed turns are disabled.</small>
+            </div>
           </div>
 
           <p id="chordDisplay" class="chord-highlight"></p>
           <p id="turnBreakdown" class="turn-breakdown"></p>
+          <p id="specialEventDisplay" class="special-event"></p>
           <p id="bonusAnnouncement" class="bonus-announcement"></p>
         </section>
 

@@ -43,6 +43,21 @@ const NOTE_VALUES = {
   "G#/Ab": 11
 };
 
+const NOTE_FREQUENCIES = {
+  C: 261.63,
+  "C#/Db": 277.18,
+  D: 293.66,
+  "D#/Eb": 311.13,
+  E: 329.63,
+  F: 349.23,
+  "F#/Gb": 369.99,
+  G: 392.0,
+  "G#/Ab": 415.3,
+  A: 440.0,
+  "A#/Bb": 466.16,
+  B: 493.88
+};
+
 const CHORD_INTERVALS = {
   "major triad": [
     [0, 4, 7],
@@ -273,13 +288,20 @@ const DEFAULT_SETTINGS = {
   winCondition: "rounds",
   roundLimit: 6,
   targetScore: 250,
+  enableTimedTurns: false,
+  timedTurnSeconds: 45,
+  enableWildCardDie: false,
   enableBonuses: true,
   bonusAllTriads: true,
   bonusFourSevenths: true,
   bonusAllFamilies: true,
   bonusExtendedPalette: true,
-  enableSoundEffects: true
+  enableSoundEffects: true,
+  enableEarTraining: true
 };
+
+const LIVE_UPDATE_KEYS = new Set(["enableSoundEffects", "enableEarTraining", "playerNames"]);
+const WILD_CARD_CHANCE = 0.125;
 
 let settingsConfigured = false;
 let activeSettings = cloneSettings(DEFAULT_SETTINGS);
@@ -298,6 +320,11 @@ let rollInProgress = false;
 let pendingConfirmAction = null;
 let pendingCancelAction = null;
 let audioContext = null;
+let turnTimerIntervalId = null;
+let turnTimerDeadline = null;
+let turnTimerStarted = false;
+let turnTimeRemainingMs = DEFAULT_SETTINGS.timedTurnSeconds * 1000;
+let timeoutPendingScore = false;
 
 const elements = {};
 
@@ -307,10 +334,12 @@ document.addEventListener("DOMContentLoaded", () => {
   populateSettingsForm(activeSettings);
   createFreshGameFromSettings(activeSettings, false);
   render();
-  openSettingsModal();
 });
 
 function cacheElements() {
+  elements.landingScreen = document.getElementById("landingScreen");
+  elements.launchGameButton = document.getElementById("launchGameButton");
+
   elements.rollButton = document.getElementById("roll");
   elements.nextTurnButton = document.getElementById("nextTurn");
   elements.resetTurnButton = document.getElementById("resetTurn");
@@ -326,6 +355,7 @@ function cacheElements() {
   elements.projectedTurnPoints = document.getElementById("projectedTurnPoints");
   elements.chordDisplay = document.getElementById("chordDisplay");
   elements.turnBreakdown = document.getElementById("turnBreakdown");
+  elements.specialEventDisplay = document.getElementById("specialEventDisplay");
   elements.bonusAnnouncement = document.getElementById("bonusAnnouncement");
   elements.currentPlayer = document.getElementById("currentPlayer");
   elements.turnCounter = document.getElementById("turnCounter");
@@ -337,6 +367,9 @@ function cacheElements() {
   elements.bonusTableStatus = document.getElementById("bonusTableStatus");
   elements.chordPointsTable = document.getElementById("chordPointsTable");
   elements.bonusTable = document.getElementById("bonusTable");
+  elements.turnTimer = document.getElementById("turnTimer");
+  elements.timerHelper = document.getElementById("timerHelper");
+  elements.timerMetric = document.getElementById("timerMetric");
 
   elements.confirmationModal = document.getElementById("confirmationModal");
   elements.modalEyebrow = document.getElementById("modalEyebrow");
@@ -360,6 +393,10 @@ function cacheElements() {
   elements.targetScore = document.getElementById("targetScore");
   elements.roundLimitField = document.getElementById("roundLimitField");
   elements.targetScoreField = document.getElementById("targetScoreField");
+  elements.enableTimedTurns = document.getElementById("enableTimedTurns");
+  elements.timedTurnSeconds = document.getElementById("timedTurnSeconds");
+  elements.timedTurnField = document.getElementById("timedTurnField");
+  elements.enableWildCardDie = document.getElementById("enableWildCardDie");
   elements.enableBonuses = document.getElementById("enableBonuses");
   elements.bonusOptions = document.getElementById("bonusOptions");
   elements.bonusAllTriads = document.getElementById("bonusAllTriads");
@@ -367,9 +404,15 @@ function cacheElements() {
   elements.bonusAllFamilies = document.getElementById("bonusAllFamilies");
   elements.bonusExtendedPalette = document.getElementById("bonusExtendedPalette");
   elements.enableSoundEffects = document.getElementById("enableSoundEffects");
+  elements.enableEarTraining = document.getElementById("enableEarTraining");
 }
 
 function bindEvents() {
+  elements.launchGameButton.addEventListener("click", () => {
+    hideLandingScreen();
+    openSettingsModal();
+  });
+
   elements.rollButton.addEventListener("click", handleRoll);
   elements.nextTurnButton.addEventListener("click", handleScoreTurn);
   elements.resetTurnButton.addEventListener("click", handleResetTurn);
@@ -392,30 +435,42 @@ function bindEvents() {
     }
   });
 
-  elements.closeModalButton.addEventListener("click", closeConfirmationModal);
+  elements.closeModalButton.addEventListener("click", () =>
+    closeConfirmationModal({ resumeTimer: true })
+  );
+
   elements.cancelButton.addEventListener("click", () => {
-    if (typeof pendingCancelAction === "function") {
-      pendingCancelAction();
-    }
-    closeConfirmationModal();
-  });
-  elements.confirmButton.addEventListener("click", () => {
-    const action = pendingConfirmAction;
-    closeConfirmationModal();
+    const action = pendingCancelAction;
+    closeConfirmationModal({ resumeTimer: true });
     if (typeof action === "function") {
       action();
     }
   });
 
-  elements.closeSettingsModalButton.addEventListener("click", closeSettingsModal);
-  elements.settingsModal.addEventListener("click", (event) => {
-    if (event.target === elements.settingsModal) {
-      closeSettingsModal();
+  elements.confirmButton.addEventListener("click", () => {
+    const action = pendingConfirmAction;
+    closeConfirmationModal({ resumeTimer: false });
+    if (typeof action === "function") {
+      action();
+    }
+    if (!hasActiveOverlay()) {
+      resumeTurnTimerIfNeeded();
     }
   });
+
+  elements.closeSettingsModalButton.addEventListener("click", () =>
+    closeSettingsModal({ resumeTimer: true })
+  );
+
+  elements.settingsModal.addEventListener("click", (event) => {
+    if (event.target === elements.settingsModal) {
+      closeSettingsModal({ resumeTimer: true });
+    }
+  });
+
   elements.confirmationModal.addEventListener("click", (event) => {
     if (event.target === elements.confirmationModal) {
-      closeConfirmationModal();
+      closeConfirmationModal({ resumeTimer: true });
     }
   });
 
@@ -424,6 +479,7 @@ function bindEvents() {
   });
 
   elements.winCondition.addEventListener("change", updateSettingsFormVisibility);
+  elements.enableTimedTurns.addEventListener("change", updateSettingsFormVisibility);
   elements.enableBonuses.addEventListener("change", updateSettingsFormVisibility);
   elements.settingsForm.addEventListener("submit", handleSaveSettings);
 }
@@ -438,45 +494,55 @@ function handleSaveSettings(event) {
 
   if (!settingsConfigured) {
     applySettings(nextSettings);
-    closeSettingsModal();
+    closeSettingsModal({ resumeTimer: false });
     return;
   }
 
-  const settingsChanged = JSON.stringify(nextSettings) !== JSON.stringify(activeSettings);
+  const changedKeys = getChangedSettingKeys(activeSettings, nextSettings);
 
-  if (!settingsChanged) {
+  if (changedKeys.length === 0) {
     elements.settingsWarning.textContent = "No changes to apply.";
     return;
   }
 
-  if (isMidGame()) {
+  const restartRequired = changedKeys.some((key) => !LIVE_UPDATE_KEYS.has(key));
+
+  if (isMidGame() && !restartRequired) {
+    applyLiveSettings(nextSettings);
+    closeSettingsModal({ resumeTimer: true });
+    return;
+  }
+
+  if (isMidGame() && restartRequired) {
     showConfirmationModal({
       eyebrow: "Start a new game?",
       title: "Apply new settings",
       message:
-        "Changing settings now will reset scores, rounds, and collected chord bonuses. Continue?",
+        "Changing gameplay rules now will reset scores, rounds, timers, and collected bonuses. Continue?",
       confirmText: "Start New Game",
       cancelText: "Keep Current Game",
       onConfirm: () => {
         applySettings(nextSettings);
-        closeSettingsModal();
+        closeSettingsModal({ resumeTimer: false });
       }
     });
     return;
   }
 
+  if (!restartRequired) {
+    applyLiveSettings(nextSettings);
+    closeSettingsModal({ resumeTimer: true });
+    return;
+  }
+
   applySettings(nextSettings);
-  closeSettingsModal();
+  closeSettingsModal({ resumeTimer: false });
 }
 
 function handleRoll() {
   if (!settingsConfigured || gameOver || rollInProgress || rollsLeft <= 0) {
     return;
   }
-
-  gameStarted = true;
-  rollInProgress = true;
-  playSoundEffect("roll");
 
   const unlockedIndices = [];
   diceState.forEach((die, index) => {
@@ -486,13 +552,19 @@ function handleRoll() {
   });
 
   if (unlockedIndices.length === 0) {
-    rollInProgress = false;
-    elements.turnBreakdown.textContent = "All dice are locked. Score the turn or unlock a note.";
+    elements.turnBreakdown.textContent =
+      "All dice are locked. Score the turn or unlock a die to keep shaping the chord.";
     render();
     return;
   }
 
+  gameStarted = true;
+  rollInProgress = true;
+  beginTurnTimerIfNeeded();
+  playSoundEffect("roll");
+
   renderDice(unlockedIndices);
+  renderButtons();
 
   window.setTimeout(() => {
     const availableFaces = getAvailableDiceFaces();
@@ -503,8 +575,14 @@ function handleRoll() {
 
     rollsLeft -= 1;
     rollInProgress = false;
+
+    if (timeoutPendingScore) {
+      handleTimedOutTurn();
+      return;
+    }
+
     render();
-  }, 550);
+  }, 720);
 }
 
 function handleScoreTurn() {
@@ -512,8 +590,24 @@ function handleScoreTurn() {
     return;
   }
 
+  finalizeCurrentTurn({ timedOut: false });
+}
+
+function handleTimedOutTurn() {
+  if (!settingsConfigured || gameOver) {
+    return;
+  }
+
+  finalizeCurrentTurn({ timedOut: true });
+}
+
+function finalizeCurrentTurn({ timedOut }) {
+  clearTurnTimerInterval();
+  timeoutPendingScore = false;
+
   const preview = evaluateCurrentTurn();
   const scoringPlayer = currentPlayer;
+  const playerName = activeSettings.playerNames[scoringPlayer];
 
   if (preview.scoredChord) {
     playerChordCounts[scoringPlayer][preview.chord] += 1;
@@ -530,15 +624,17 @@ function handleScoreTurn() {
   }
 
   const summaryParts = [];
+  if (timedOut) {
+    summaryParts.push(`Time ran out for ${playerName}.`);
+  }
+
   if (preview.chord === "None") {
-    summaryParts.push(`${activeSettings.playerNames[scoringPlayer]} locked no scoring chord.`);
+    summaryParts.push(`${playerName} finishes the turn without a scoring chord.`);
   } else if (preview.repeatedChordBlocked) {
-    summaryParts.push(
-      `${activeSettings.playerNames[scoringPlayer]} repeated ${preview.chord}, so the turn scores 0.`
-    );
+    summaryParts.push(`${playerName} repeated ${preview.chord}, so the turn scores 0.`);
   } else {
     summaryParts.push(
-      `${activeSettings.playerNames[scoringPlayer]} scored ${formatPoints(preview.lockedPoints)} locked-note points + ${formatPoints(preview.chordPoints)} chord points.`
+      `${playerName} banks ${formatPoints(preview.lockedPoints)} locked-note points plus ${formatPoints(preview.chordPoints)} chord points from ${preview.chord}.`
     );
   }
 
@@ -553,8 +649,10 @@ function handleScoreTurn() {
   elements.turnBreakdown.textContent = summaryParts.join(" ");
   elements.bonusAnnouncement.textContent =
     preview.bonusAwards.length > 0
-      ? `${activeSettings.playerNames[scoringPlayer]} earned ${formatPoints(preview.bonusPoints)} bonus points this turn.`
-      : "";
+      ? `${playerName} earned ${formatPoints(preview.bonusPoints)} bonus points this turn.`
+      : timedOut
+        ? "The timer auto-scored the turn with the currently locked notes."
+        : "";
 
   if (checkForWinner(scoringPlayer)) {
     render();
@@ -572,6 +670,7 @@ function handleScoreTurn() {
 
 function handleResetTurn() {
   if (!settingsConfigured) {
+    hideLandingScreen();
     openSettingsModal();
     return;
   }
@@ -584,6 +683,8 @@ function handleResetTurn() {
     cancelText: "Keep Turn",
     onConfirm: () => {
       startNewTurn();
+      elements.turnBreakdown.textContent = "Turn reset. Roll when you are ready.";
+      elements.bonusAnnouncement.textContent = "";
       render();
     }
   });
@@ -593,7 +694,7 @@ function handleResetGame() {
   showConfirmationModal({
     eyebrow: "Reset match",
     title: "Reset the full game?",
-    message: "Scores, round progress, and collected bonuses will all be cleared.",
+    message: "Scores, round progress, timers, and collected bonuses will all be cleared.",
     confirmText: "Reset Game",
     cancelText: "Cancel",
     onConfirm: () => {
@@ -608,12 +709,40 @@ function toggleDieLock(index) {
     return;
   }
 
-  if (!diceState[index].note) {
+  const die = diceState[index];
+  if (!die || !die.note) {
     return;
   }
 
-  diceState[index].locked = !diceState[index].locked;
-  playSoundEffect(diceState[index].locked ? "lock" : "unlock");
+  die.locked = !die.locked;
+
+  if (die.locked) {
+    if (activeSettings.enableEarTraining) {
+      playPianoNote(die.note);
+    } else {
+      playSoundEffect("lock");
+    }
+  }
+
+  render();
+}
+
+function changeWildDieNote(index, nextNote) {
+  const die = diceState[index];
+
+  if (!die || !die.isWild) {
+    return;
+  }
+
+  if (!getAvailableDiceFaces().includes(nextNote)) {
+    return;
+  }
+
+  if (die.note === nextNote) {
+    return;
+  }
+
+  die.note = nextNote;
   render();
 }
 
@@ -626,33 +755,59 @@ function createFreshGameFromSettings(settings, configured) {
   gameStarted = false;
   gameOver = false;
   rollInProgress = false;
-  diceState = Array.from({ length: activeSettings.numberOfDice }, () => ({
-    note: "",
-    locked: false
-  }));
+  diceState = createDiceState(activeSettings.numberOfDice);
   playerScores = Array.from({ length: activeSettings.numberOfPlayers }, () => 0);
   playerChordCounts = Array.from({ length: activeSettings.numberOfPlayers }, () =>
     createChordCountMap()
   );
   playerUniqueChords = Array.from({ length: activeSettings.numberOfPlayers }, () => new Set());
   playerAwardedBonuses = Array.from({ length: activeSettings.numberOfPlayers }, () => new Set());
-  elements.turnBreakdown.textContent = "";
+  resetTurnTimer();
+  elements.turnBreakdown.textContent = configured
+    ? "Roll when you are ready."
+    : "Start setup from the opening screen to choose the rules for your first match.";
+  elements.specialEventDisplay.textContent = "";
   elements.bonusAnnouncement.textContent = "";
+  elements.settingsWarning.textContent = "";
 }
 
 function applySettings(nextSettings) {
   createFreshGameFromSettings(nextSettings, true);
   populateSettingsForm(activeSettings);
+  hideLandingScreen();
+  render();
+}
+
+function applyLiveSettings(nextSettings) {
+  activeSettings.enableSoundEffects = nextSettings.enableSoundEffects;
+  activeSettings.enableEarTraining = nextSettings.enableEarTraining;
+  activeSettings.playerNames = [...nextSettings.playerNames];
+  draftPlayerNames = [...nextSettings.playerNames];
+  populateSettingsForm(activeSettings);
+  elements.bonusAnnouncement.textContent = "Audio settings and player names updated. The current match continues.";
   render();
 }
 
 function startNewTurn() {
   rollsLeft = 3;
   rollInProgress = false;
-  diceState = Array.from({ length: activeSettings.numberOfDice }, () => ({
+  diceState = createDiceState(activeSettings.numberOfDice);
+  resetTurnTimer();
+}
+
+function createDiceState(numberOfDice) {
+  const nextDice = Array.from({ length: numberOfDice }, () => ({
     note: "",
-    locked: false
+    locked: false,
+    isWild: false
   }));
+
+  if (activeSettings.enableWildCardDie && Math.random() < WILD_CARD_CHANCE) {
+    const wildIndex = Math.floor(Math.random() * nextDice.length);
+    nextDice[wildIndex].isWild = true;
+  }
+
+  return nextDice;
 }
 
 function render() {
@@ -669,6 +824,7 @@ function renderStatus() {
   const visibleTotal = diceState.reduce((sum, die) => sum + (FACE_VALUES[die.note] || 0), 0);
   const lockedNotes = getLockedNotes();
   const lockedTotal = lockedNotes.reduce((sum, note) => sum + (FACE_VALUES[note] || 0), 0);
+  const wildIndex = diceState.findIndex((die) => die.isWild);
 
   elements.rollsLeft.textContent = String(rollsLeft);
   elements.totalPointsVisible.textContent = formatPoints(visibleTotal);
@@ -686,7 +842,8 @@ function renderStatus() {
 
   if (preview.chord === "None") {
     elements.turnBreakdown.textContent =
-      elements.turnBreakdown.textContent || "No chord points will score unless the locked notes form a valid shape.";
+      elements.turnBreakdown.textContent ||
+      "No chord points will score unless the locked notes form a valid shape.";
   } else if (preview.repeatedChordBlocked) {
     elements.turnBreakdown.textContent = `Repeated chord scoring is disabled, so ${preview.chord} would be worth 0 this turn.`;
   } else {
@@ -697,15 +854,16 @@ function renderStatus() {
             .join(", ")}.`
         : "";
 
-    elements.turnBreakdown.textContent = `Projected score: ${formatPoints(preview.lockedPoints)} locked-note points + ${formatPoints(preview.chordPoints)} chord points${bonusText}`;
+    elements.turnBreakdown.textContent = `Projected score: ${formatPoints(preview.lockedPoints)} locked-note points + ${formatPoints(preview.chordPoints)} chord points.${bonusText}`;
   }
 
   if (!settingsConfigured) {
-    elements.settingsStatus.textContent = "Settings required before the game can begin.";
-    elements.settingsRequirement.textContent = "Open Settings and press Save Settings to unlock the Roll button.";
+    elements.settingsStatus.textContent = "Settings required before the first roll.";
+    elements.settingsRequirement.textContent =
+      "Use Start Setup to save your rules and unlock the Roll button.";
   } else if (gameOver) {
     elements.settingsStatus.textContent = "Match complete.";
-    elements.settingsRequirement.textContent = "Change settings or reset the game to play again.";
+    elements.settingsRequirement.textContent = "Reset the game or change the rules to play again.";
   } else {
     elements.settingsStatus.textContent = "Ready to play.";
     elements.settingsRequirement.textContent = "";
@@ -723,6 +881,23 @@ function renderStatus() {
   elements.bonusTableStatus.textContent = activeSettings.enableBonuses
     ? "Bonus awards are enabled."
     : "Bonus awards are turned off for this match.";
+
+  const specialMessages = [];
+  if (wildIndex >= 0) {
+    specialMessages.push(
+      `Rare wildcard live on Die ${wildIndex + 1}. Tune it to any ${activeSettings.includeAccidentals ? "chromatic" : "natural-note"} pitch after rolling.`
+    );
+  }
+  if (activeSettings.enableTimedTurns) {
+    specialMessages.push(
+      turnTimerStarted
+        ? "The turn timer is running."
+        : "The turn timer will start on the first roll."
+    );
+  }
+  elements.specialEventDisplay.textContent = specialMessages.join(" ");
+
+  renderTimerDisplay();
 }
 
 function renderScoreboard() {
@@ -748,32 +923,76 @@ function renderButtons() {
     !settingsConfigured || gameOver || rollInProgress || rollsLeft <= 0;
   elements.nextTurnButton.disabled =
     !settingsConfigured || gameOver || rollInProgress || rollsLeft > 0;
-  elements.resetTurnButton.disabled = !settingsConfigured || gameOver || (!gameStarted && !hasOpenTurn);
+  elements.resetTurnButton.disabled =
+    !settingsConfigured || gameOver || (!gameStarted && !hasOpenTurn);
   elements.resetGameButton.disabled = !settingsConfigured && !gameStarted;
 }
 
 function renderDice(rollingIndices = []) {
+  const availableFaces = getAvailableDiceFaces();
   elements.diceContainer.innerHTML = "";
+
   diceState.forEach((die, index) => {
+    const dieStack = document.createElement("div");
+    dieStack.className = "die-stack";
+
     const dieButton = document.createElement("button");
     dieButton.type = "button";
     dieButton.className = "dice";
     if (die.locked) {
       dieButton.classList.add("is-locked");
     }
+    if (die.isWild) {
+      dieButton.classList.add("is-wild");
+    }
     if (rollingIndices.includes(index)) {
       dieButton.classList.add("is-rolling");
     }
 
+    dieButton.setAttribute("aria-label", buildDieAriaLabel(die, index));
     dieButton.innerHTML = `
-      <span class="dice-note">${die.note || "♪"}</span>
-      <span class="dice-subtext">${
-        die.note ? (die.locked ? "Held for scoring" : "Tap to hold") : "Waiting for roll"
-      }</span>
+      <span class="dice-corner dice-corner-a"></span>
+      <span class="dice-corner dice-corner-b"></span>
+      <span class="dice-corner dice-corner-c"></span>
+      <span class="dice-corner dice-corner-d"></span>
+      ${die.isWild ? '<span class="dice-badge">Wild</span>' : ""}
+      <span class="dice-note${die.note ? "" : " dice-note-placeholder"}">${escapeHtml(
+        die.note || "--"
+      )}</span>
+      <span class="dice-subtext">${escapeHtml(getDieSubtext(die))}</span>
     `;
-
     dieButton.addEventListener("click", () => toggleDieLock(index));
-    elements.diceContainer.appendChild(dieButton);
+    dieStack.appendChild(dieButton);
+
+    if (die.isWild) {
+      const wildControl = document.createElement("label");
+      wildControl.className = `wild-note-control${die.note ? "" : " is-disabled"}`;
+
+      const label = document.createElement("span");
+      label.textContent = die.note ? "Tune the wildcard" : "Roll first, then tune";
+
+      const select = document.createElement("select");
+      availableFaces.forEach((face) => {
+        const option = document.createElement("option");
+        option.value = face;
+        option.textContent = face;
+        select.appendChild(option);
+      });
+
+      select.value = die.note && availableFaces.includes(die.note) ? die.note : availableFaces[0];
+      select.disabled = !die.note || !settingsConfigured || gameOver || rollInProgress;
+      select.addEventListener("click", (event) => event.stopPropagation());
+      select.addEventListener("change", (event) => {
+        event.stopPropagation();
+        changeWildDieNote(index, event.target.value);
+      });
+
+      wildControl.appendChild(label);
+      wildControl.appendChild(select);
+      dieStack.appendChild(wildControl);
+    }
+
+    elements.diceContainer.appendChild(dieStack);
   });
 }
 
@@ -790,7 +1009,7 @@ function renderChordTable() {
         .map((countMap) => {
           const count = countMap[chord];
           return count > 0
-            ? `<td class="claimed-cell">${count === 1 ? "✓" : `${count}x`}</td>`
+            ? `<td class="claimed-cell">${count === 1 ? "&#10003;" : `${count}x`}</td>`
             : "<td></td>";
         })
         .join("");
@@ -853,12 +1072,16 @@ function populateSettingsForm(settings) {
   elements.winCondition.value = settings.winCondition;
   elements.roundLimit.value = String(settings.roundLimit);
   elements.targetScore.value = String(settings.targetScore);
+  elements.enableTimedTurns.checked = settings.enableTimedTurns;
+  elements.timedTurnSeconds.value = String(settings.timedTurnSeconds);
+  elements.enableWildCardDie.checked = settings.enableWildCardDie;
   elements.enableBonuses.checked = settings.enableBonuses;
   elements.bonusAllTriads.checked = settings.bonusAllTriads;
   elements.bonusFourSevenths.checked = settings.bonusFourSevenths;
   elements.bonusAllFamilies.checked = settings.bonusAllFamilies;
   elements.bonusExtendedPalette.checked = settings.bonusExtendedPalette;
   elements.enableSoundEffects.checked = settings.enableSoundEffects;
+  elements.enableEarTraining.checked = settings.enableEarTraining;
   syncPlayerNameInputs(settings.numberOfPlayers);
   updateSettingsFormVisibility();
   elements.settingsWarning.textContent = "";
@@ -885,11 +1108,15 @@ function syncPlayerNameInputs(count) {
 
 function updateSettingsFormVisibility() {
   const showRounds = elements.winCondition.value === "rounds";
+  const timedTurnsEnabled = elements.enableTimedTurns.checked;
+  const bonusesEnabled = elements.enableBonuses.checked;
+
   elements.roundLimitField.style.display = showRounds ? "block" : "none";
   elements.targetScoreField.style.display = showRounds ? "none" : "block";
-
-  const bonusesEnabled = elements.enableBonuses.checked;
+  elements.timedTurnField.classList.toggle("is-disabled", !timedTurnsEnabled);
+  elements.timedTurnSeconds.disabled = !timedTurnsEnabled;
   elements.bonusOptions.classList.toggle("is-disabled", !bonusesEnabled);
+
   Array.from(elements.bonusOptions.querySelectorAll("input")).forEach((input) => {
     input.disabled = !bonusesEnabled;
   });
@@ -898,8 +1125,19 @@ function updateSettingsFormVisibility() {
 function getSettingsFromForm() {
   const numberOfPlayers = readClampedPlayerCount();
   const selectedDice = Array.from(elements.numberOfDiceInputs).find((input) => input.checked);
-  const roundLimit = Math.max(1, Number.parseInt(elements.roundLimit.value, 10) || 1);
-  const targetScore = Math.max(25, Number.parseInt(elements.targetScore.value, 10) || 25);
+  const roundLimit = clampNumber(elements.roundLimit.value, 1, 25, DEFAULT_SETTINGS.roundLimit);
+  const targetScore = clampNumber(
+    elements.targetScore.value,
+    25,
+    2000,
+    DEFAULT_SETTINGS.targetScore
+  );
+  const timedTurnSeconds = clampNumber(
+    elements.timedTurnSeconds.value,
+    10,
+    180,
+    DEFAULT_SETTINGS.timedTurnSeconds
+  );
 
   if (!selectedDice) {
     elements.settingsWarning.textContent = "Choose how many dice you want to play with.";
@@ -921,12 +1159,16 @@ function getSettingsFromForm() {
     winCondition: elements.winCondition.value,
     roundLimit,
     targetScore,
+    enableTimedTurns: elements.enableTimedTurns.checked,
+    timedTurnSeconds,
+    enableWildCardDie: elements.enableWildCardDie.checked,
     enableBonuses: elements.enableBonuses.checked,
     bonusAllTriads: elements.bonusAllTriads.checked,
     bonusFourSevenths: elements.bonusFourSevenths.checked,
     bonusAllFamilies: elements.bonusAllFamilies.checked,
     bonusExtendedPalette: elements.bonusExtendedPalette.checked,
-    enableSoundEffects: elements.enableSoundEffects.checked
+    enableSoundEffects: elements.enableSoundEffects.checked,
+    enableEarTraining: elements.enableEarTraining.checked
   };
 }
 
@@ -935,15 +1177,31 @@ function readClampedPlayerCount() {
   return Math.min(10, Math.max(1, raw));
 }
 
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  const safeValue = Number.isNaN(parsed) ? fallback : parsed;
+  return Math.min(max, Math.max(min, safeValue));
+}
+
 function openSettingsModal() {
+  populateSettingsForm(activeSettings);
+  pauseTurnTimerForOverlay();
   elements.mainMenuDropdown.style.display = "none";
   elements.settingsModal.classList.add("is-open");
   elements.settingsModal.setAttribute("aria-hidden", "false");
 }
 
-function closeSettingsModal() {
+function closeSettingsModal({ resumeTimer } = { resumeTimer: true }) {
   elements.settingsModal.classList.remove("is-open");
   elements.settingsModal.setAttribute("aria-hidden", "true");
+
+  if (!settingsConfigured) {
+    showLandingScreen();
+  }
+
+  if (resumeTimer && !hasActiveOverlay()) {
+    resumeTurnTimerIfNeeded();
+  }
 }
 
 function showConfirmationModal({
@@ -955,22 +1213,35 @@ function showConfirmationModal({
   onConfirm,
   onCancel
 }) {
+  pauseTurnTimerForOverlay();
   elements.modalEyebrow.textContent = eyebrow;
   elements.modalTitle.textContent = title;
   elements.modalMessage.textContent = message;
   elements.confirmButton.textContent = confirmText;
   elements.cancelButton.textContent = cancelText;
-  pendingConfirmAction = onConfirm;
+  pendingConfirmAction = onConfirm || null;
   pendingCancelAction = onCancel || null;
   elements.confirmationModal.classList.add("is-open");
   elements.confirmationModal.setAttribute("aria-hidden", "false");
 }
 
-function closeConfirmationModal() {
+function closeConfirmationModal({ resumeTimer } = { resumeTimer: true }) {
   elements.confirmationModal.classList.remove("is-open");
   elements.confirmationModal.setAttribute("aria-hidden", "true");
   pendingConfirmAction = null;
   pendingCancelAction = null;
+
+  if (resumeTimer && !hasActiveOverlay()) {
+    resumeTurnTimerIfNeeded();
+  }
+}
+
+function showLandingScreen() {
+  elements.landingScreen.classList.add("is-open");
+}
+
+function hideLandingScreen() {
+  elements.landingScreen.classList.remove("is-open");
 }
 
 function getAvailableDiceFaces() {
@@ -1070,7 +1341,10 @@ function findNewBonuses(playerIndex, prospectiveChord) {
 function checkForWinner(scoringPlayer) {
   if (activeSettings.winCondition === "target") {
     if (playerScores[scoringPlayer] >= activeSettings.targetScore) {
-      concludeGame([scoringPlayer], `${activeSettings.playerNames[scoringPlayer]} hit the target score.`);
+      concludeGame(
+        [scoringPlayer],
+        `${activeSettings.playerNames[scoringPlayer]} hit the target score.`
+      );
       return true;
     }
     return false;
@@ -1098,9 +1372,12 @@ function checkForWinner(scoringPlayer) {
 
 function concludeGame(winnerIndices, message) {
   gameOver = true;
+  clearTurnTimerInterval();
+  turnTimerStarted = false;
+  turnTimeRemainingMs = 0;
   playSoundEffect("win");
-  const winnerNames = winnerIndices.map((index) => activeSettings.playerNames[index]).join(", ");
 
+  const winnerNames = winnerIndices.map((index) => activeSettings.playerNames[index]).join(", ");
   showConfirmationModal({
     eyebrow: "Game over",
     title: winnerIndices.length === 1 ? `${winnerNames} wins!` : "It is a tie!",
@@ -1124,14 +1401,16 @@ function createChordCountMap() {
 }
 
 function buildSettingsSummary(settings) {
-  const pitchPool = settings.includeAccidentals ? "Accidentals on" : "Naturals only";
+  const pitchPool = settings.includeAccidentals ? "chromatic pitch pool" : "natural-note pitch pool";
   const repeatRule = settings.allowRepeatedChordTypes
-    ? "Repeated chords can score again"
-    : "Repeated chords score 0";
-  const bonusRule = settings.enableBonuses ? "Bonuses on" : "Bonuses off";
-  return `${settings.numberOfDice} dice, ${settings.numberOfPlayers} players, ${pitchPool}, ${repeatRule}, ${bonusRule}, sound ${
-    settings.enableSoundEffects ? "on" : "off"
-  }.`;
+    ? "repeats score again"
+    : "repeats score 0";
+  const bonusRule = settings.enableBonuses ? "bonuses on" : "bonuses off";
+  const timerRule = settings.enableTimedTurns
+    ? `${settings.timedTurnSeconds}s timer`
+    : "no turn timer";
+  const wildRule = settings.enableWildCardDie ? "rare wildcard on" : "wildcard off";
+  return `${settings.numberOfDice} dice, ${settings.numberOfPlayers} players, ${pitchPool}, ${repeatRule}, ${bonusRule}, ${timerRule}, ${wildRule}, ear training ${settings.enableEarTraining ? "on" : "off"}, sound effects ${settings.enableSoundEffects ? "on" : "off"}.`;
 }
 
 function buildWinConditionLabel(settings) {
@@ -1148,6 +1427,13 @@ function formatPoints(value) {
   return value.toFixed(1).replace(/\.0$/, "");
 }
 
+function formatCountdown(milliseconds) {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -1161,6 +1447,16 @@ function cloneSettings(settings) {
   return JSON.parse(JSON.stringify(settings));
 }
 
+function getChangedSettingKeys(currentSettings, nextSettings) {
+  return Object.keys(nextSettings).filter((key) => {
+    return !areSettingValuesEqual(currentSettings[key], nextSettings[key]);
+  });
+}
+
+function areSettingValuesEqual(currentValue, nextValue) {
+  return JSON.stringify(currentValue) === JSON.stringify(nextValue);
+}
+
 function isMidGame() {
   return (
     gameStarted &&
@@ -1172,6 +1468,124 @@ function isMidGame() {
   );
 }
 
+function hasActiveOverlay() {
+  return (
+    elements.settingsModal.classList.contains("is-open") ||
+    elements.confirmationModal.classList.contains("is-open")
+  );
+}
+
+function resetTurnTimer() {
+  clearTurnTimerInterval();
+  turnTimerStarted = false;
+  timeoutPendingScore = false;
+  turnTimeRemainingMs = activeSettings.timedTurnSeconds * 1000;
+}
+
+function beginTurnTimerIfNeeded() {
+  if (!activeSettings.enableTimedTurns || turnTimerStarted || gameOver) {
+    return;
+  }
+
+  turnTimerStarted = true;
+  startTurnTimerCountdown(activeSettings.timedTurnSeconds * 1000);
+}
+
+function startTurnTimerCountdown(durationMs) {
+  clearTurnTimerInterval();
+  turnTimeRemainingMs = durationMs;
+  turnTimerDeadline = Date.now() + durationMs;
+  renderTimerDisplay();
+
+  turnTimerIntervalId = window.setInterval(() => {
+    turnTimeRemainingMs = Math.max(0, turnTimerDeadline - Date.now());
+    renderTimerDisplay();
+
+    if (turnTimeRemainingMs <= 0) {
+      clearTurnTimerInterval();
+      if (rollInProgress) {
+        timeoutPendingScore = true;
+      } else {
+        handleTimedOutTurn();
+      }
+    }
+  }, 200);
+}
+
+function clearTurnTimerInterval() {
+  if (turnTimerIntervalId) {
+    window.clearInterval(turnTimerIntervalId);
+  }
+
+  turnTimerIntervalId = null;
+  turnTimerDeadline = null;
+}
+
+function pauseTurnTimerForOverlay() {
+  if (!activeSettings.enableTimedTurns || !turnTimerStarted || !turnTimerIntervalId) {
+    return;
+  }
+
+  turnTimeRemainingMs = Math.max(0, turnTimerDeadline - Date.now());
+  clearTurnTimerInterval();
+  renderTimerDisplay();
+}
+
+function resumeTurnTimerIfNeeded() {
+  if (
+    !activeSettings.enableTimedTurns ||
+    !turnTimerStarted ||
+    turnTimerIntervalId ||
+    turnTimeRemainingMs <= 0 ||
+    gameOver ||
+    hasActiveOverlay()
+  ) {
+    return;
+  }
+
+  startTurnTimerCountdown(turnTimeRemainingMs);
+}
+
+function renderTimerDisplay() {
+  if (!activeSettings.enableTimedTurns) {
+    elements.turnTimer.textContent = "Off";
+    elements.timerHelper.textContent = "Timed turns are disabled.";
+    elements.timerMetric.classList.remove("is-alert");
+    return;
+  }
+
+  const displayMilliseconds = turnTimerStarted
+    ? turnTimeRemainingMs
+    : activeSettings.timedTurnSeconds * 1000;
+
+  elements.turnTimer.textContent = formatCountdown(displayMilliseconds);
+
+  if (!turnTimerStarted) {
+    elements.timerHelper.textContent = "Timer starts on the first roll.";
+  } else if (turnTimeRemainingMs <= 10000) {
+    elements.timerHelper.textContent = "Hurry. The turn auto-scores at zero.";
+  } else {
+    elements.timerHelper.textContent = "The countdown is active for this turn.";
+  }
+
+  elements.timerMetric.classList.toggle(
+    "is-alert",
+    turnTimerStarted && turnTimeRemainingMs <= 10000
+  );
+}
+
+function ensureAudioContext() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  if (audioContext.state === "suspended") {
+    void audioContext.resume();
+  }
+
+  return audioContext;
+}
+
 function playSoundEffect(type) {
   if (!activeSettings.enableSoundEffects) {
     return;
@@ -1179,8 +1593,7 @@ function playSoundEffect(type) {
 
   const sequences = {
     roll: [260, 320, 415],
-    lock: [660],
-    unlock: [520],
+    lock: [640],
     bonus: [523, 659, 784],
     win: [392, 523, 659, 784]
   };
@@ -1191,29 +1604,127 @@ function playSoundEffect(type) {
   }
 
   try {
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
+    const context = ensureAudioContext();
+    const startTime = context.currentTime;
 
-    if (audioContext.state === "suspended") {
-      void audioContext.resume();
-    }
-
-    const startTime = audioContext.currentTime;
     sequence.forEach((frequency, index) => {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
       oscillator.type = type === "roll" ? "triangle" : "sine";
       oscillator.frequency.value = frequency;
       gainNode.gain.setValueAtTime(0.0001, startTime + index * 0.08);
-      gainNode.gain.exponentialRampToValueAtTime(0.035, startTime + index * 0.08 + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.04, startTime + index * 0.08 + 0.01);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + index * 0.08 + 0.14);
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(context.destination);
       oscillator.start(startTime + index * 0.08);
       oscillator.stop(startTime + index * 0.08 + 0.15);
     });
   } catch (error) {
     console.warn("Sound playback unavailable.", error);
   }
+}
+
+function playPianoNote(note) {
+  if (!activeSettings.enableEarTraining) {
+    return;
+  }
+
+  const frequency = NOTE_FREQUENCIES[note];
+  if (!frequency) {
+    return;
+  }
+
+  try {
+    const context = ensureAudioContext();
+    const startTime = context.currentTime;
+
+    const masterGain = context.createGain();
+    const filter = context.createBiquadFilter();
+    const compressor = context.createDynamicsCompressor();
+
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(3600, startTime);
+    filter.Q.value = 0.8;
+
+    compressor.threshold.value = -24;
+    compressor.knee.value = 18;
+    compressor.ratio.value = 4;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.22;
+
+    masterGain.gain.setValueAtTime(0.0001, startTime);
+    masterGain.gain.exponentialRampToValueAtTime(0.22, startTime + 0.008);
+    masterGain.gain.exponentialRampToValueAtTime(0.08, startTime + 0.09);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.2);
+
+    masterGain.connect(filter);
+    filter.connect(compressor);
+    compressor.connect(context.destination);
+
+    const partials = [
+      { ratio: 1, gain: 0.9, type: "triangle", detune: -2, release: 1.18 },
+      { ratio: 2, gain: 0.34, type: "sine", detune: 1, release: 0.92 },
+      { ratio: 3, gain: 0.12, type: "sine", detune: -3, release: 0.72 }
+    ];
+
+    partials.forEach((partial) => {
+      const oscillator = context.createOscillator();
+      const partialGain = context.createGain();
+
+      oscillator.type = partial.type;
+      oscillator.frequency.setValueAtTime(frequency * partial.ratio, startTime);
+      oscillator.detune.value = partial.detune;
+
+      partialGain.gain.setValueAtTime(partial.gain, startTime);
+      partialGain.gain.exponentialRampToValueAtTime(0.0001, startTime + partial.release);
+
+      oscillator.connect(partialGain);
+      partialGain.connect(masterGain);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + 1.22);
+    });
+
+    const hammerOscillator = context.createOscillator();
+    const hammerGain = context.createGain();
+    hammerOscillator.type = "square";
+    hammerOscillator.frequency.setValueAtTime(frequency * 4, startTime);
+    hammerGain.gain.setValueAtTime(0.02, startTime);
+    hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
+    hammerOscillator.connect(hammerGain);
+    hammerGain.connect(masterGain);
+    hammerOscillator.start(startTime);
+    hammerOscillator.stop(startTime + 0.03);
+  } catch (error) {
+    console.warn("Ear training playback unavailable.", error);
+  }
+}
+
+function getDieSubtext(die) {
+  if (!die.note) {
+    return die.isWild ? "Rare wildcard waiting for a roll" : "Waiting for roll";
+  }
+
+  if (die.locked) {
+    return die.isWild ? "Held and still tunable" : "Held for scoring";
+  }
+
+  return die.isWild ? "Tap to hold or tune below" : "Tap to hold";
+}
+
+function buildDieAriaLabel(die, index) {
+  const parts = [`Die ${index + 1}`];
+
+  if (die.isWild) {
+    parts.push("wildcard");
+  }
+
+  if (die.note) {
+    parts.push(`showing ${die.note}`);
+  } else {
+    parts.push("waiting for a roll");
+  }
+
+  parts.push(die.locked ? "locked" : "unlocked");
+  return parts.join(", ");
 }
