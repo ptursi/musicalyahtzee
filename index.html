@@ -170,7 +170,7 @@
                 <span>Enable the rare wildcard die</span>
               </label>
               <p class="setting-help">
-                About 1 in 8 turns will feature one die that can be retuned to any allowed note.
+                Every so often, a turn will feature one die that can be retuned to any note.
               </p>
             </section>
 
@@ -197,6 +197,18 @@
                   <input type="checkbox" id="bonusExtendedPalette" checked />
                   <span>3 different 9th or scale patterns (+65)</span>
                 </label>
+                <label class="toggle-row">
+                  <input type="checkbox" id="bonusSameTriadFiveTimes" checked />
+                  <span>Same 3-note chord 5 times (+100)</span>
+                </label>
+                <label class="toggle-row">
+                  <input type="checkbox" id="bonusSameSeventhFiveTimes" checked />
+                  <span>Same 4-note chord 5 times (+135)</span>
+                </label>
+                <label class="toggle-row">
+                  <input type="checkbox" id="bonusSameExtendedFiveTimes" checked />
+                  <span>Same 5-note chord 5 times (+170)</span>
+                </label>
               </div>
             </section>
 
@@ -208,11 +220,10 @@
               </label>
               <label class="toggle-row">
                 <input type="checkbox" id="enableEarTraining" checked />
-                <span>Enable ear training lock notes</span>
+                <span>Enable ear training mode</span>
               </label>
               <p class="setting-help">
-                Ear training plays a piano-style note from C4-B4 when a die is locked. Unlocking
-                stays silent.
+                Listen to the notes of the dice to hear potential chords.
               </p>
             </section>
           </div>
@@ -254,14 +265,14 @@
           </div>
         </header>
 
-        <section class="status-card">
-          <div>
+        <section id="statusCard" class="status-card">
+          <div id="setupStatusBlock">
             <p class="status-label">Current setup</p>
             <p id="settingsStatus" class="status-title"></p>
             <p id="settingsSummary" class="status-copy"></p>
             <p id="settingsRequirement" class="status-requirement"></p>
           </div>
-          <div class="status-rule-box">
+          <div id="winRuleBox" class="status-rule-box">
             <p class="status-label">Win rule</p>
             <p id="winConditionDisplay" class="status-title"></p>
           </div>
@@ -280,10 +291,6 @@
             <div class="metric-card">
               <span>Rolls Left</span>
               <strong id="rollsLeft">3</strong>
-            </div>
-            <div class="metric-card">
-              <span>Visible Note Value</span>
-              <strong id="totalPointsVisible">0</strong>
             </div>
             <div class="metric-card">
               <span>Locked Note Value</span>
@@ -312,11 +319,17 @@
 
         <div class="button-row">
           <button id="roll" class="button-primary" type="button">Roll</button>
+          <button id="playMelodic" class="button-secondary" type="button" hidden>
+            Play Melodically
+          </button>
+          <button id="playHarmonic" class="button-secondary" type="button" hidden>
+            Play Harmonically
+          </button>
           <button id="nextTurn" class="button-secondary" type="button">Score Turn</button>
         </div>
 
-        <section class="table-grid">
-          <article class="table-card">
+        <section id="tableGrid" class="table-grid">
+          <article id="chordTableCard" class="table-card">
             <div class="table-card-header">
               <h2>Chord Score Sheet</h2>
               <p>Track which chord types each player has collected.</p>
@@ -329,7 +342,7 @@
             </div>
           </article>
 
-          <article class="table-card">
+          <article id="bonusTableCard" class="table-card">
             <div class="table-card-header">
               <h2>Bonus Tracker</h2>
               <p id="bonusTableStatus">Bonus awards are enabled.</p>

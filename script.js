@@ -237,6 +237,7 @@ const BONUS_DEFINITIONS = [
   {
     id: "allTriads",
     settingKey: "bonusAllTriads",
+    minDice: 3,
     label: "Triad Grand Slam",
     points: 75,
     description: "Collect all 5 triad types.",
@@ -247,6 +248,7 @@ const BONUS_DEFINITIONS = [
   {
     id: "fourSevenths",
     settingKey: "bonusFourSevenths",
+    minDice: 4,
     label: "Seventh Chord Specialist",
     points: 90,
     description: "Collect any 4 of the 5 featured 7th chords.",
@@ -257,6 +259,7 @@ const BONUS_DEFINITIONS = [
   {
     id: "allFamilies",
     settingKey: "bonusAllFamilies",
+    minDice: 5,
     label: "Theory Traveler",
     points: 50,
     description: "Collect at least one triad, one 7th chord, and one extended pattern.",
@@ -270,6 +273,7 @@ const BONUS_DEFINITIONS = [
   {
     id: "extendedPalette",
     settingKey: "bonusExtendedPalette",
+    minDice: 5,
     label: "Color Collector",
     points: 65,
     description: "Collect any 3 distinct 9th or scale patterns.",
@@ -278,6 +282,79 @@ const BONUS_DEFINITIONS = [
     }
   }
 ];
+
+const REPEAT_MILESTONE_DEFINITIONS = [
+  {
+    id: "sameTriadFiveTimes",
+    idPrefix: "repeatTriad",
+    settingKey: "bonusSameTriadFiveTimes",
+    minDice: 3,
+    label: "Triad Specialist",
+    points: 100,
+    noteCount: 3,
+    description: "Score the same 3-note chord type 5 times."
+  },
+  {
+    id: "sameSeventhFiveTimes",
+    idPrefix: "repeatSeventh",
+    settingKey: "bonusSameSeventhFiveTimes",
+    minDice: 4,
+    label: "Seventh Specialist",
+    points: 135,
+    noteCount: 4,
+    description: "Score the same 4-note chord type 5 times."
+  },
+  {
+    id: "sameExtendedFiveTimes",
+    idPrefix: "repeatExtended",
+    settingKey: "bonusSameExtendedFiveTimes",
+    minDice: 5,
+    label: "Extended Specialist",
+    points: 170,
+    noteCount: 5,
+    description: "Score the same 5-note chord type 5 times."
+  }
+];
+
+const CHORD_NOTE_COUNTS = Object.fromEntries(
+  Object.keys(CHORD_INTERVALS).map((chord) => [chord, CHORD_INTERVALS[chord][0].length])
+);
+
+const ROOT_POSITION_INTERVALS = {
+  "major triad": [0, 4, 7],
+  "minor triad": [0, 3, 7],
+  "diminished triad": [0, 3, 6],
+  "augmented triad": [0, 4, 8],
+  "sus4 triad": [0, 5, 7],
+  "minor major 7th chord": [0, 3, 7, 11],
+  "major 7th chord": [0, 4, 7, 11],
+  "half diminished 7th chord": [0, 3, 6, 10],
+  "minor 7th chord": [0, 3, 7, 10],
+  "dominant 7th chord": [0, 4, 7, 10],
+  "fully diminished 7th chord": [0, 3, 6, 9],
+  "Major 9": [0, 2, 4, 7, 11],
+  "Minor 9": [0, 2, 3, 7, 10],
+  "Dominant b9": [0, 1, 4, 7, 10],
+  "Dominant 9": [0, 2, 4, 7, 10],
+  "Dominant #9": [0, 3, 4, 7, 10],
+  "Pentatonic Scale": [0, 2, 4, 7, 9],
+  "Whole Step Series": [0, 2, 4, 6, 8],
+  "Chromatic Scale": [0, 1, 2, 3, 4]
+};
+
+const PLAYBACK_VOICING_INTERVALS = {
+  ...ROOT_POSITION_INTERVALS,
+  "Major 9": [0, 4, 7, 11, 14],
+  "Minor 9": [0, 3, 7, 10, 14],
+  "Dominant b9": [0, 4, 7, 10, 13],
+  "Dominant 9": [0, 4, 7, 10, 14],
+  "Dominant #9": [0, 4, 7, 10, 15]
+};
+
+const CHORD_MIDI_RANGE = {
+  min: 48,
+  max: 74
+};
 
 const DEFAULT_SETTINGS = {
   includeAccidentals: true,
@@ -296,6 +373,9 @@ const DEFAULT_SETTINGS = {
   bonusFourSevenths: true,
   bonusAllFamilies: true,
   bonusExtendedPalette: true,
+  bonusSameTriadFiveTimes: true,
+  bonusSameSeventhFiveTimes: true,
+  bonusSameExtendedFiveTimes: true,
   enableSoundEffects: true,
   enableEarTraining: true
 };
@@ -341,6 +421,8 @@ function cacheElements() {
   elements.launchGameButton = document.getElementById("launchGameButton");
 
   elements.rollButton = document.getElementById("roll");
+  elements.playMelodicButton = document.getElementById("playMelodic");
+  elements.playHarmonicButton = document.getElementById("playHarmonic");
   elements.nextTurnButton = document.getElementById("nextTurn");
   elements.resetTurnButton = document.getElementById("resetTurn");
   elements.resetGameButton = document.getElementById("resetGame");
@@ -350,7 +432,6 @@ function cacheElements() {
   elements.mainMenuDropdown = document.getElementById("mainMenuDropdown");
   elements.diceContainer = document.getElementById("diceContainer");
   elements.rollsLeft = document.getElementById("rollsLeft");
-  elements.totalPointsVisible = document.getElementById("totalPointsVisible");
   elements.totalPointsLocked = document.getElementById("totalPointsLocked");
   elements.projectedTurnPoints = document.getElementById("projectedTurnPoints");
   elements.chordDisplay = document.getElementById("chordDisplay");
@@ -361,10 +442,15 @@ function cacheElements() {
   elements.turnCounter = document.getElementById("turnCounter");
   elements.playerScores = document.getElementById("playerScores");
   elements.winConditionDisplay = document.getElementById("winConditionDisplay");
+  elements.statusCard = document.getElementById("statusCard");
+  elements.setupStatusBlock = document.getElementById("setupStatusBlock");
   elements.settingsStatus = document.getElementById("settingsStatus");
   elements.settingsSummary = document.getElementById("settingsSummary");
   elements.settingsRequirement = document.getElementById("settingsRequirement");
   elements.bonusTableStatus = document.getElementById("bonusTableStatus");
+  elements.tableGrid = document.getElementById("tableGrid");
+  elements.chordTableCard = document.getElementById("chordTableCard");
+  elements.bonusTableCard = document.getElementById("bonusTableCard");
   elements.chordPointsTable = document.getElementById("chordPointsTable");
   elements.bonusTable = document.getElementById("bonusTable");
   elements.turnTimer = document.getElementById("turnTimer");
@@ -403,6 +489,9 @@ function cacheElements() {
   elements.bonusFourSevenths = document.getElementById("bonusFourSevenths");
   elements.bonusAllFamilies = document.getElementById("bonusAllFamilies");
   elements.bonusExtendedPalette = document.getElementById("bonusExtendedPalette");
+  elements.bonusSameTriadFiveTimes = document.getElementById("bonusSameTriadFiveTimes");
+  elements.bonusSameSeventhFiveTimes = document.getElementById("bonusSameSeventhFiveTimes");
+  elements.bonusSameExtendedFiveTimes = document.getElementById("bonusSameExtendedFiveTimes");
   elements.enableSoundEffects = document.getElementById("enableSoundEffects");
   elements.enableEarTraining = document.getElementById("enableEarTraining");
 }
@@ -414,6 +503,8 @@ function bindEvents() {
   });
 
   elements.rollButton.addEventListener("click", handleRoll);
+  elements.playMelodicButton.addEventListener("click", handlePlayLockedNotesMelodically);
+  elements.playHarmonicButton.addEventListener("click", handlePlayLockedNotesHarmonically);
   elements.nextTurnButton.addEventListener("click", handleScoreTurn);
   elements.resetTurnButton.addEventListener("click", handleResetTurn);
   elements.resetGameButton.addEventListener("click", handleResetGame);
@@ -586,7 +677,20 @@ function handleRoll() {
 }
 
 function handleScoreTurn() {
-  if (!settingsConfigured || gameOver || rollInProgress || rollsLeft > 0) {
+  if (!settingsConfigured || gameOver || rollInProgress || !canScoreTurnNow()) {
+    return;
+  }
+
+  if (rollsLeft > 0) {
+    showConfirmationModal({
+      eyebrow: "Score early?",
+      title: "Bank this turn now?",
+      message:
+        "All dice are locked, but you still have rolls left. Are you sure you want to score the turn now?",
+      confirmText: "Score Turn",
+      cancelText: "Keep Rolling",
+      onConfirm: () => finalizeCurrentTurn({ timedOut: false })
+    });
     return;
   }
 
@@ -702,6 +806,22 @@ function handleResetGame() {
       render();
     }
   });
+}
+
+function handlePlayLockedNotesMelodically() {
+  if (!canPlayLockedNotes()) {
+    return;
+  }
+
+  playLockedNotes("melodic");
+}
+
+function handlePlayLockedNotesHarmonically() {
+  if (!canPlayLockedNotes()) {
+    return;
+  }
+
+  playLockedNotes("harmonic");
 }
 
 function toggleDieLock(index) {
@@ -821,13 +941,12 @@ function render() {
 
 function renderStatus() {
   const preview = evaluateCurrentTurn();
-  const visibleTotal = diceState.reduce((sum, die) => sum + (FACE_VALUES[die.note] || 0), 0);
   const lockedNotes = getLockedNotes();
   const lockedTotal = lockedNotes.reduce((sum, note) => sum + (FACE_VALUES[note] || 0), 0);
   const wildIndex = diceState.findIndex((die) => die.isWild);
+  const visibleBonuses = getVisibleBonusDefinitions();
 
   elements.rollsLeft.textContent = String(rollsLeft);
-  elements.totalPointsVisible.textContent = formatPoints(visibleTotal);
   elements.totalPointsLocked.textContent = formatPoints(lockedTotal);
   elements.projectedTurnPoints.textContent = formatPoints(preview.totalPoints);
 
@@ -869,6 +988,8 @@ function renderStatus() {
     elements.settingsRequirement.textContent = "";
   }
 
+  elements.setupStatusBlock.hidden = settingsConfigured;
+  elements.statusCard.classList.toggle("is-compact", settingsConfigured);
   elements.settingsSummary.textContent = buildSettingsSummary(activeSettings);
   elements.winConditionDisplay.textContent = buildWinConditionLabel(activeSettings);
   elements.turnCounter.textContent =
@@ -878,9 +999,10 @@ function renderStatus() {
   elements.currentPlayer.innerHTML = `Current Player: <span style="color:${PLAYER_COLORS[currentPlayer]}">${escapeHtml(
     activeSettings.playerNames[currentPlayer]
   )}</span>`;
-  elements.bonusTableStatus.textContent = activeSettings.enableBonuses
-    ? "Bonus awards are enabled."
-    : "Bonus awards are turned off for this match.";
+  elements.bonusTableStatus.textContent =
+    visibleBonuses.length > 0
+      ? `${visibleBonuses.length} live bonus ${visibleBonuses.length === 1 ? "track" : "tracks"} shown for this setup.`
+      : "No bonuses are active for this setup.";
 
   const specialMessages = [];
   if (wildIndex >= 0) {
@@ -896,6 +1018,7 @@ function renderStatus() {
     );
   }
   elements.specialEventDisplay.textContent = specialMessages.join(" ");
+  elements.timerMetric.hidden = !activeSettings.enableTimedTurns;
 
   renderTimerDisplay();
 }
@@ -918,11 +1041,16 @@ function renderScoreboard() {
 
 function renderButtons() {
   const hasOpenTurn = diceState.some((die) => die.note);
+  const canPlayNow = canPlayLockedNotes();
 
   elements.rollButton.disabled =
     !settingsConfigured || gameOver || rollInProgress || rollsLeft <= 0;
+  elements.playMelodicButton.hidden = !activeSettings.enableEarTraining;
+  elements.playHarmonicButton.hidden = !activeSettings.enableEarTraining;
+  elements.playMelodicButton.disabled = !canPlayNow;
+  elements.playHarmonicButton.disabled = !canPlayNow;
   elements.nextTurnButton.disabled =
-    !settingsConfigured || gameOver || rollInProgress || rollsLeft > 0;
+    !settingsConfigured || gameOver || rollInProgress || !canScoreTurnNow();
   elements.resetTurnButton.disabled =
     !settingsConfigured || gameOver || (!gameStarted && !hasOpenTurn);
   elements.resetGameButton.disabled = !settingsConfigured && !gameStarted;
@@ -997,13 +1125,14 @@ function renderDice(rollingIndices = []) {
 }
 
 function renderChordTable() {
+  const visibleChords = getVisibleChordTypes();
   const headers = [
     "<tr><th>Chord Type</th><th>Base Points</th>",
     ...activeSettings.playerNames.map((name) => `<th>${escapeHtml(name)}</th>`),
     "</tr>"
   ].join("");
 
-  const body = Object.keys(BASE_CHORD_POINTS)
+  const body = visibleChords
     .map((chord) => {
       const playerCells = playerChordCounts
         .map((countMap) => {
@@ -1029,16 +1158,32 @@ function renderChordTable() {
 }
 
 function renderBonusTable() {
+  const tableDefinitions = getVisibleBonusDefinitions();
+  const bonusTableVisible = tableDefinitions.length > 0;
+  elements.bonusTableCard.hidden = !bonusTableVisible;
+  elements.tableGrid.classList.toggle("is-single", !bonusTableVisible);
+
+  if (!bonusTableVisible) {
+    elements.bonusTable.querySelector("thead").innerHTML = "";
+    elements.bonusTable.querySelector("tbody").innerHTML = "";
+    return;
+  }
+
   const headers = [
     "<tr><th>Bonus</th><th>Value</th>",
     ...activeSettings.playerNames.map((name) => `<th>${escapeHtml(name)}</th>`),
     "</tr>"
   ].join("");
 
-  const body = BONUS_DEFINITIONS.map((bonus) => {
+  const body = tableDefinitions.map((bonus) => {
     const enabled = activeSettings.enableBonuses && activeSettings[bonus.settingKey];
     const playerCells = playerAwardedBonuses
-      .map((awards) => {
+      .map((awards, index) => {
+        if (bonus.idPrefix) {
+          const count = getRepeatBonusCount(index, bonus.idPrefix);
+          return count > 0 ? `<td class="claimed-cell">${count}x</td>` : "<td></td>";
+        }
+
         return awards.has(bonus.id)
           ? `<td class="claimed-cell">+${formatPoints(bonus.points)}</td>`
           : "<td></td>";
@@ -1080,6 +1225,9 @@ function populateSettingsForm(settings) {
   elements.bonusFourSevenths.checked = settings.bonusFourSevenths;
   elements.bonusAllFamilies.checked = settings.bonusAllFamilies;
   elements.bonusExtendedPalette.checked = settings.bonusExtendedPalette;
+  elements.bonusSameTriadFiveTimes.checked = settings.bonusSameTriadFiveTimes;
+  elements.bonusSameSeventhFiveTimes.checked = settings.bonusSameSeventhFiveTimes;
+  elements.bonusSameExtendedFiveTimes.checked = settings.bonusSameExtendedFiveTimes;
   elements.enableSoundEffects.checked = settings.enableSoundEffects;
   elements.enableEarTraining.checked = settings.enableEarTraining;
   syncPlayerNameInputs(settings.numberOfPlayers);
@@ -1167,6 +1315,9 @@ function getSettingsFromForm() {
     bonusFourSevenths: elements.bonusFourSevenths.checked,
     bonusAllFamilies: elements.bonusAllFamilies.checked,
     bonusExtendedPalette: elements.bonusExtendedPalette.checked,
+    bonusSameTriadFiveTimes: elements.bonusSameTriadFiveTimes.checked,
+    bonusSameSeventhFiveTimes: elements.bonusSameSeventhFiveTimes.checked,
+    bonusSameExtendedFiveTimes: elements.bonusSameExtendedFiveTimes.checked,
     enableSoundEffects: elements.enableSoundEffects.checked,
     enableEarTraining: elements.enableEarTraining.checked
   };
@@ -1329,13 +1480,34 @@ function findNewBonuses(playerIndex, prospectiveChord) {
   const uniqueChords = new Set(playerUniqueChords[playerIndex]);
   uniqueChords.add(prospectiveChord);
 
-  return BONUS_DEFINITIONS.filter((bonus) => {
+  const awards = BONUS_DEFINITIONS.filter((bonus) => {
     return (
       activeSettings[bonus.settingKey] &&
       !playerAwardedBonuses[playerIndex].has(bonus.id) &&
       bonus.qualifies(uniqueChords)
     );
   });
+
+  const prospectiveCount = playerChordCounts[playerIndex][prospectiveChord] + 1;
+  const chordNoteCount = CHORD_NOTE_COUNTS[prospectiveChord];
+
+  REPEAT_MILESTONE_DEFINITIONS.forEach((bonus) => {
+    const dynamicId = `${bonus.idPrefix}:${prospectiveChord}`;
+    if (
+      activeSettings[bonus.settingKey] &&
+      chordNoteCount === bonus.noteCount &&
+      prospectiveCount === 5 &&
+      !playerAwardedBonuses[playerIndex].has(dynamicId)
+    ) {
+      awards.push({
+        ...bonus,
+        id: dynamicId,
+        label: `${bonus.label}: ${prospectiveChord}`
+      });
+    }
+  });
+
+  return awards;
 }
 
 function checkForWinner(scoringPlayer) {
@@ -1411,6 +1583,46 @@ function buildSettingsSummary(settings) {
     : "no turn timer";
   const wildRule = settings.enableWildCardDie ? "rare wildcard on" : "wildcard off";
   return `${settings.numberOfDice} dice, ${settings.numberOfPlayers} players, ${pitchPool}, ${repeatRule}, ${bonusRule}, ${timerRule}, ${wildRule}, ear training ${settings.enableEarTraining ? "on" : "off"}, sound effects ${settings.enableSoundEffects ? "on" : "off"}.`;
+}
+
+function getVisibleChordTypes() {
+  return Object.keys(BASE_CHORD_POINTS).filter(
+    (chord) => CHORD_NOTE_COUNTS[chord] <= activeSettings.numberOfDice
+  );
+}
+
+function getVisibleBonusDefinitions() {
+  if (!activeSettings.enableBonuses) {
+    return [];
+  }
+
+  return [...BONUS_DEFINITIONS, ...REPEAT_MILESTONE_DEFINITIONS].filter((bonus) => {
+    return activeSettings[bonus.settingKey] && activeSettings.numberOfDice >= bonus.minDice;
+  });
+}
+
+function getRepeatBonusCount(playerIndex, idPrefix) {
+  return Array.from(playerAwardedBonuses[playerIndex]).filter((id) =>
+    id.startsWith(`${idPrefix}:`)
+  ).length;
+}
+
+function areAllDiceLocked() {
+  return diceState.length > 0 && diceState.every((die) => die.note && die.locked);
+}
+
+function canScoreTurnNow() {
+  return rollsLeft === 0 || areAllDiceLocked();
+}
+
+function canPlayLockedNotes() {
+  return (
+    settingsConfigured &&
+    activeSettings.enableEarTraining &&
+    !gameOver &&
+    !rollInProgress &&
+    getLockedNotes().length > 0
+  );
 }
 
 function buildWinConditionLabel(settings) {
@@ -1586,6 +1798,179 @@ function ensureAudioContext() {
   return audioContext;
 }
 
+function midiToFrequency(midiNumber) {
+  return 440 * Math.pow(2, (midiNumber - 69) / 12);
+}
+
+function getNoteIndexFromC(note) {
+  return (NOTE_VALUES[note] + 9) % 12;
+}
+
+function getRootPitchClassForChord(notes, chord) {
+  const rootIntervals = ROOT_POSITION_INTERVALS[chord];
+  if (!rootIntervals) {
+    return null;
+  }
+
+  const pitchClasses = [...new Set(notes.map((note) => getNoteIndexFromC(note)))].sort(
+    (left, right) => left - right
+  );
+
+  for (const candidate of pitchClasses) {
+    const candidateIntervals = pitchClasses
+      .map((pitchClass) => (pitchClass - candidate + 12) % 12)
+      .sort((left, right) => left - right);
+
+    if (candidateIntervals.toString() === rootIntervals.toString()) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function getSingleOctaveMidiNotes(notes) {
+  return [...notes]
+    .sort((left, right) => getNoteIndexFromC(left) - getNoteIndexFromC(right))
+    .map((note) => 60 + getNoteIndexFromC(note));
+}
+
+function getPreferredRootOctave(rootPitchClass, chord) {
+  const noteCount = ROOT_POSITION_INTERVALS[chord]?.length || 0;
+  const pitchClassOfE = getNoteIndexFromC("E");
+  const pitchClassOfF = getNoteIndexFromC("F");
+  const pitchClassOfSharpF = getNoteIndexFromC("F#/Gb");
+
+  if (noteCount >= 5) {
+    return 3;
+  }
+
+  if (noteCount === 4) {
+    return rootPitchClass <= pitchClassOfE ? 4 : 3;
+  }
+
+  if (chord === "diminished triad" && rootPitchClass === pitchClassOfSharpF) {
+    return 4;
+  }
+
+  return rootPitchClass <= pitchClassOfF ? 4 : 3;
+}
+
+function getLogicalChordMidiNotes(notes, chord) {
+  if (chord === "None") {
+    return getSingleOctaveMidiNotes(notes);
+  }
+
+  const rootIntervals = ROOT_POSITION_INTERVALS[chord];
+  const playbackIntervals = PLAYBACK_VOICING_INTERVALS[chord] || rootIntervals;
+  const rootPitchClass = getRootPitchClassForChord(notes, chord);
+  if (!rootIntervals || !playbackIntervals || rootPitchClass === null) {
+    return getSingleOctaveMidiNotes(notes);
+  }
+
+  let rootMidi = 12 * (getPreferredRootOctave(rootPitchClass, chord) + 1) + rootPitchClass;
+  let midiNotes = playbackIntervals.map((interval) => rootMidi + interval);
+
+  while (midiNotes[0] < CHORD_MIDI_RANGE.min) {
+    rootMidi += 12;
+    midiNotes = playbackIntervals.map((interval) => rootMidi + interval);
+  }
+
+  while (midiNotes[midiNotes.length - 1] > CHORD_MIDI_RANGE.max) {
+    rootMidi -= 12;
+    midiNotes = playbackIntervals.map((interval) => rootMidi + interval);
+  }
+
+  if (
+    midiNotes[0] < CHORD_MIDI_RANGE.min ||
+    midiNotes[midiNotes.length - 1] > CHORD_MIDI_RANGE.max
+  ) {
+    return getSingleOctaveMidiNotes(notes);
+  }
+
+  return midiNotes;
+}
+
+function playPianoFrequency(frequency, startOffset = 0, duration = 1.2, gainScale = 1) {
+  const context = ensureAudioContext();
+  const startTime = context.currentTime + startOffset;
+
+  const masterGain = context.createGain();
+  const filter = context.createBiquadFilter();
+  const compressor = context.createDynamicsCompressor();
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(3600, startTime);
+  filter.Q.value = 0.8;
+
+  compressor.threshold.value = -24;
+  compressor.knee.value = 18;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.22;
+
+  masterGain.gain.setValueAtTime(0.0001, startTime);
+  masterGain.gain.exponentialRampToValueAtTime(0.22 * gainScale, startTime + 0.008);
+  masterGain.gain.exponentialRampToValueAtTime(0.08 * gainScale, startTime + 0.09);
+  masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+  masterGain.connect(filter);
+  filter.connect(compressor);
+  compressor.connect(context.destination);
+
+  const partials = [
+    {
+      ratio: 1,
+      gain: 0.9,
+      type: "triangle",
+      detune: -2,
+      release: Math.max(0.18, duration - 0.02)
+    },
+    {
+      ratio: 2,
+      gain: 0.34,
+      type: "sine",
+      detune: 1,
+      release: Math.max(0.16, duration - 0.28)
+    },
+    {
+      ratio: 3,
+      gain: 0.12,
+      type: "sine",
+      detune: -3,
+      release: Math.max(0.14, duration - 0.48)
+    }
+  ];
+
+  partials.forEach((partial) => {
+    const oscillator = context.createOscillator();
+    const partialGain = context.createGain();
+
+    oscillator.type = partial.type;
+    oscillator.frequency.setValueAtTime(frequency * partial.ratio, startTime);
+    oscillator.detune.value = partial.detune;
+
+    partialGain.gain.setValueAtTime(partial.gain * gainScale, startTime);
+    partialGain.gain.exponentialRampToValueAtTime(0.0001, startTime + partial.release);
+
+    oscillator.connect(partialGain);
+    partialGain.connect(masterGain);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration + 0.02);
+  });
+
+  const hammerOscillator = context.createOscillator();
+  const hammerGain = context.createGain();
+  hammerOscillator.type = "square";
+  hammerOscillator.frequency.setValueAtTime(frequency * 4, startTime);
+  hammerGain.gain.setValueAtTime(0.02 * gainScale, startTime);
+  hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
+  hammerOscillator.connect(hammerGain);
+  hammerGain.connect(masterGain);
+  hammerOscillator.start(startTime);
+  hammerOscillator.stop(startTime + 0.03);
+}
+
 function playSoundEffect(type) {
   if (!activeSettings.enableSoundEffects) {
     return;
@@ -1636,67 +2021,40 @@ function playPianoNote(note) {
   }
 
   try {
-    const context = ensureAudioContext();
-    const startTime = context.currentTime;
-
-    const masterGain = context.createGain();
-    const filter = context.createBiquadFilter();
-    const compressor = context.createDynamicsCompressor();
-
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(3600, startTime);
-    filter.Q.value = 0.8;
-
-    compressor.threshold.value = -24;
-    compressor.knee.value = 18;
-    compressor.ratio.value = 4;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.22;
-
-    masterGain.gain.setValueAtTime(0.0001, startTime);
-    masterGain.gain.exponentialRampToValueAtTime(0.22, startTime + 0.008);
-    masterGain.gain.exponentialRampToValueAtTime(0.08, startTime + 0.09);
-    masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.2);
-
-    masterGain.connect(filter);
-    filter.connect(compressor);
-    compressor.connect(context.destination);
-
-    const partials = [
-      { ratio: 1, gain: 0.9, type: "triangle", detune: -2, release: 1.18 },
-      { ratio: 2, gain: 0.34, type: "sine", detune: 1, release: 0.92 },
-      { ratio: 3, gain: 0.12, type: "sine", detune: -3, release: 0.72 }
-    ];
-
-    partials.forEach((partial) => {
-      const oscillator = context.createOscillator();
-      const partialGain = context.createGain();
-
-      oscillator.type = partial.type;
-      oscillator.frequency.setValueAtTime(frequency * partial.ratio, startTime);
-      oscillator.detune.value = partial.detune;
-
-      partialGain.gain.setValueAtTime(partial.gain, startTime);
-      partialGain.gain.exponentialRampToValueAtTime(0.0001, startTime + partial.release);
-
-      oscillator.connect(partialGain);
-      partialGain.connect(masterGain);
-      oscillator.start(startTime);
-      oscillator.stop(startTime + 1.22);
-    });
-
-    const hammerOscillator = context.createOscillator();
-    const hammerGain = context.createGain();
-    hammerOscillator.type = "square";
-    hammerOscillator.frequency.setValueAtTime(frequency * 4, startTime);
-    hammerGain.gain.setValueAtTime(0.02, startTime);
-    hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
-    hammerOscillator.connect(hammerGain);
-    hammerGain.connect(masterGain);
-    hammerOscillator.start(startTime);
-    hammerOscillator.stop(startTime + 0.03);
+    playPianoFrequency(frequency, 0, 1.2, 1);
   } catch (error) {
     console.warn("Ear training playback unavailable.", error);
+  }
+}
+
+function playLockedNotes(mode) {
+  const lockedNotes = getLockedNotes();
+  if (lockedNotes.length === 0) {
+    return;
+  }
+
+  const chord = identifyChord(lockedNotes);
+  const playableMidis = getLogicalChordMidiNotes(lockedNotes, chord);
+
+  try {
+    if (mode === "harmonic") {
+      playableMidis.forEach((midi) => {
+        playPianoFrequency(midiToFrequency(midi), 0, 1.55, 0.7);
+      });
+      elements.specialEventDisplay.textContent =
+        chord !== "None"
+          ? `${chord} played harmonically.`
+          : "Locked notes played harmonically.";
+      return;
+    }
+
+    playableMidis.forEach((midi, index) => {
+      playPianoFrequency(midiToFrequency(midi), index * 0.3, 0.95, 0.9);
+    });
+    elements.specialEventDisplay.textContent =
+      chord !== "None" ? `${chord} played melodically.` : "Locked notes played melodically.";
+  } catch (error) {
+    console.warn("Locked note playback unavailable.", error);
   }
 }
 

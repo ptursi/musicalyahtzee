@@ -107,6 +107,7 @@ body::after {
 .container {
   width: min(1240px, 100%);
   margin: 0 auto 2rem;
+  min-width: 0;
   padding: 1.4rem;
   border-radius: 30px;
   background:
@@ -355,6 +356,7 @@ select:focus-visible {
 .status-card,
 .score-card,
 .table-card {
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 26px;
@@ -364,6 +366,10 @@ select:focus-visible {
 
 .status-card {
   margin-bottom: 1rem;
+}
+
+.status-card.is-compact {
+  justify-content: flex-start;
 }
 
 .status-title {
@@ -434,7 +440,7 @@ select:focus-visible {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.75rem;
   margin-top: 1rem;
 }
@@ -515,7 +521,7 @@ select:focus-visible {
 
 .dice-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
   perspective: 1200px;
 }
@@ -693,10 +699,19 @@ select:focus-visible {
   margin-bottom: 1rem;
 }
 
+.button-row > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .table-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.table-grid.is-single {
+  grid-template-columns: 1fr;
 }
 
 .table-card-header {
@@ -704,7 +719,9 @@ select:focus-visible {
 }
 
 .table-wrap {
+  max-width: 100%;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -953,6 +970,10 @@ select {
   .score-pill-row {
     justify-content: flex-start;
   }
+
+  .score-pill {
+    min-width: 0;
+  }
 }
 
 @media (max-width: 720px) {
@@ -975,6 +996,10 @@ select {
     padding: 0.75rem;
   }
 
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .button-row,
   .landing-actions,
   .modal-actions,
@@ -986,15 +1011,46 @@ select {
 
   .dice-container {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.8rem;
+  }
+
+  .dice {
+    min-height: 136px;
+  }
+
+  table {
+    min-width: 0;
+  }
+
+  th,
+  td {
+    padding: 0.6rem 0.45rem;
+    font-size: 0.82rem;
+  }
+
+  .table-note {
+    font-size: 0.72rem;
   }
 }
 
 @media (max-width: 520px) {
+  .container {
+    padding: 0.9rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
   .dice-container {
     grid-template-columns: 1fr;
   }
 
-  table {
-    min-width: 460px;
+  .dice {
+    min-height: 124px;
+  }
+
+  .score-pill {
+    width: 100%;
   }
 }
