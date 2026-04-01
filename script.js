@@ -170,24 +170,24 @@ const CHORD_INTERVALS = {
 };
 
 const BASE_CHORD_POINTS = {
-  "major triad": 20,
-  "minor triad": 20,
-  "diminished triad": 25,
-  "augmented triad": 35,
-  "sus4 triad": 25,
-  "minor major 7th chord": 50,
-  "major 7th chord": 50,
-  "half diminished 7th chord": 50,
+  "major triad": 25,
+  "minor triad": 25,
+  "diminished triad": 35,
+  "augmented triad": 45,
+  "sus4 triad": 30,
+  "minor major 7th chord": 75,
+  "major 7th chord": 60,
+  "half diminished 7th chord": 65,
   "minor 7th chord": 50,
-  "dominant 7th chord": 50,
-  "fully diminished 7th chord": 75,
-  "Major 9": 100,
-  "Minor 9": 100,
-  "Dominant b9": 100,
-  "Dominant 9": 100,
-  "Dominant #9": 100,
-  "Pentatonic Scale": 100,
-  "Whole Step Series": 200,
+  "dominant 7th chord": 55,
+  "fully diminished 7th chord": 90,
+  "Major 9": 110,
+  "Minor 9": 110,
+  "Dominant b9": 130,
+  "Dominant 9": 120,
+  "Dominant #9": 140,
+  "Pentatonic Scale": 60,
+  "Whole Step Series": 180,
   "Chromatic Scale": 300
 };
 
@@ -233,88 +233,140 @@ const PLAYER_COLORS = [
   "#5a6538"
 ];
 
-const BONUS_DEFINITIONS = [
+const HIDDEN_BONUS_DEFINITIONS = [
+  {
+    id: "clutchComposer",
+    label: "Clutch Composer",
+    points: 40,
+    minDice: 3,
+    repeatable: true,
+    description: "Score a valid chord on the final roll.",
+    qualifies(context) {
+      return context.scoredChord && context.rollsLeft === 0;
+    }
+  },
+  {
+    id: "perfectEar",
+    label: "Perfect Ear",
+    points: 10,
+    minDice: 3,
+    repeatable: true,
+    description: "Score without using melodic or harmonic playback.",
+    qualifies(context) {
+      return context.scoredChord && activeSettings.enableEarTraining && !context.turnUsedPlayback;
+    }
+  },
+  {
+    id: "chaosMaster",
+    label: "Chaos Master",
+    points: 60,
+    minDice: 3,
+    repeatable: true,
+    description: "Score on the final roll without locking any dice beforehand.",
+    qualifies(context) {
+      return context.scoredChord && context.rollsLeft === 0 && !context.turnLockedBeforeFinalRoll;
+    }
+  },
+  {
+    id: "voiceLeading",
+    label: "Voice Leading",
+    points: 30,
+    minDice: 3,
+    repeatable: true,
+    description: "Share at least 2 notes with your previous scoring chord.",
+    qualifies(context) {
+      return context.scoredChord && context.sharedNoteCount >= 2;
+    }
+  },
+  {
+    id: "keyLoyalty",
+    label: "Key Loyalty",
+    points: 50,
+    minDice: 3,
+    repeatable: false,
+    description: "Score notes from the same compatible key on 3 turns.",
+    qualifies(context) {
+      return context.scoredChord && context.compatibleKeys.some((keyName) => (context.playerKeyCounts[keyName] || 0) + 1 >= 3);
+    }
+  },
+  {
+    id: "speedRacer",
+    label: "Speed Racer",
+    points: 25,
+    minDice: 3,
+    repeatable: true,
+    description: "Score within 10 seconds of your first roll.",
+    qualifies(context) {
+      return context.scoredChord && context.turnFirstRollTimestamp !== null && Date.now() - context.turnFirstRollTimestamp <= 10000;
+    }
+  },
   {
     id: "allTriads",
-    settingKey: "bonusAllTriads",
-    minDice: 3,
     label: "Triad Grand Slam",
     points: 75,
+    minDice: 3,
+    repeatable: false,
     description: "Collect all 5 triad types.",
-    qualifies(uniqueChords) {
-      return TRIAD_TYPES.every((type) => uniqueChords.has(type));
+    qualifies(context) {
+      return TRIAD_TYPES.every((type) => context.uniqueChords.has(type));
     }
   },
   {
     id: "fourSevenths",
-    settingKey: "bonusFourSevenths",
-    minDice: 4,
     label: "Seventh Chord Specialist",
     points: 90,
+    minDice: 4,
+    repeatable: false,
     description: "Collect any 4 of the 5 featured 7th chords.",
-    qualifies(uniqueChords) {
-      return FEATURED_SEVENTH_TYPES.filter((type) => uniqueChords.has(type)).length >= 4;
+    qualifies(context) {
+      return FEATURED_SEVENTH_TYPES.filter((type) => context.uniqueChords.has(type)).length >= 4;
     }
   },
   {
     id: "allFamilies",
-    settingKey: "bonusAllFamilies",
-    minDice: 5,
     label: "Theory Traveler",
     points: 50,
+    minDice: 5,
+    repeatable: false,
     description: "Collect at least one triad, one 7th chord, and one extended pattern.",
-    qualifies(uniqueChords) {
-      const hasTriad = TRIAD_TYPES.some((type) => uniqueChords.has(type));
-      const hasSeventh = ALL_SEVENTH_TYPES.some((type) => uniqueChords.has(type));
-      const hasExtended = EXTENDED_TYPES.some((type) => uniqueChords.has(type));
+    qualifies(context) {
+      const hasTriad = TRIAD_TYPES.some((type) => context.uniqueChords.has(type));
+      const hasSeventh = ALL_SEVENTH_TYPES.some((type) => context.uniqueChords.has(type));
+      const hasExtended = EXTENDED_TYPES.some((type) => context.uniqueChords.has(type));
       return hasTriad && hasSeventh && hasExtended;
     }
   },
   {
     id: "extendedPalette",
-    settingKey: "bonusExtendedPalette",
-    minDice: 5,
     label: "Color Collector",
     points: 65,
+    minDice: 5,
+    repeatable: false,
     description: "Collect any 3 distinct 9th or scale patterns.",
-    qualifies(uniqueChords) {
-      return EXTENDED_TYPES.filter((type) => uniqueChords.has(type)).length >= 3;
+    qualifies(context) {
+      return EXTENDED_TYPES.filter((type) => context.uniqueChords.has(type)).length >= 3;
     }
   }
 ];
 
-const REPEAT_MILESTONE_DEFINITIONS = [
-  {
-    id: "sameTriadFiveTimes",
-    idPrefix: "repeatTriad",
-    settingKey: "bonusSameTriadFiveTimes",
-    minDice: 3,
-    label: "Triad Specialist",
-    points: 100,
-    noteCount: 3,
-    description: "Score the same 3-note chord type 5 times."
-  },
-  {
-    id: "sameSeventhFiveTimes",
-    idPrefix: "repeatSeventh",
-    settingKey: "bonusSameSeventhFiveTimes",
-    minDice: 4,
-    label: "Seventh Specialist",
-    points: 135,
-    noteCount: 4,
-    description: "Score the same 4-note chord type 5 times."
-  },
-  {
-    id: "sameExtendedFiveTimes",
-    idPrefix: "repeatExtended",
-    settingKey: "bonusSameExtendedFiveTimes",
-    minDice: 5,
-    label: "Extended Specialist",
-    points: 170,
-    noteCount: 5,
-    description: "Score the same 5-note chord type 5 times."
-  }
+const PITCH_NAMES_FROM_C = [
+  "C",
+  "C#/Db",
+  "D",
+  "D#/Eb",
+  "E",
+  "F",
+  "F#/Gb",
+  "G",
+  "G#/Ab",
+  "A",
+  "A#/Bb",
+  "B"
 ];
+
+const MAJOR_KEY_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
+const NATURAL_MINOR_KEY_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
+const KEY_SIGNATURES = buildKeySignatures();
 
 const CHORD_NOTE_COUNTS = Object.fromEntries(
   Object.keys(CHORD_INTERVALS).map((chord) => [chord, CHORD_INTERVALS[chord][0].length])
@@ -369,13 +421,7 @@ const DEFAULT_SETTINGS = {
   timedTurnSeconds: 45,
   enableWildCardDie: false,
   enableBonuses: true,
-  bonusAllTriads: true,
-  bonusFourSevenths: true,
-  bonusAllFamilies: true,
-  bonusExtendedPalette: true,
-  bonusSameTriadFiveTimes: true,
-  bonusSameSeventhFiveTimes: true,
-  bonusSameExtendedFiveTimes: true,
+  enableRiskMode: true,
   enableSoundEffects: true,
   enableEarTraining: true
 };
@@ -393,7 +439,12 @@ let diceState = [];
 let playerScores = [];
 let playerChordCounts = [];
 let playerUniqueChords = [];
-let playerAwardedBonuses = [];
+let playerBonusCounts = [];
+let revealedBonusOrder = [];
+let revealedBonusMeta = {};
+let playerLastScoringPitchClasses = [];
+let playerKeyCounts = [];
+let claimedChordMaestros = new Set();
 let gameStarted = false;
 let gameOver = false;
 let rollInProgress = false;
@@ -405,6 +456,9 @@ let turnTimerDeadline = null;
 let turnTimerStarted = false;
 let turnTimeRemainingMs = DEFAULT_SETTINGS.timedTurnSeconds * 1000;
 let timeoutPendingScore = false;
+let turnUsedPlayback = false;
+let turnLockedBeforeFinalRoll = false;
+let turnFirstRollTimestamp = null;
 
 const elements = {};
 
@@ -484,14 +538,8 @@ function cacheElements() {
   elements.timedTurnField = document.getElementById("timedTurnField");
   elements.enableWildCardDie = document.getElementById("enableWildCardDie");
   elements.enableBonuses = document.getElementById("enableBonuses");
+  elements.enableRiskMode = document.getElementById("enableRiskMode");
   elements.bonusOptions = document.getElementById("bonusOptions");
-  elements.bonusAllTriads = document.getElementById("bonusAllTriads");
-  elements.bonusFourSevenths = document.getElementById("bonusFourSevenths");
-  elements.bonusAllFamilies = document.getElementById("bonusAllFamilies");
-  elements.bonusExtendedPalette = document.getElementById("bonusExtendedPalette");
-  elements.bonusSameTriadFiveTimes = document.getElementById("bonusSameTriadFiveTimes");
-  elements.bonusSameSeventhFiveTimes = document.getElementById("bonusSameSeventhFiveTimes");
-  elements.bonusSameExtendedFiveTimes = document.getElementById("bonusSameExtendedFiveTimes");
   elements.enableSoundEffects = document.getElementById("enableSoundEffects");
   elements.enableEarTraining = document.getElementById("enableEarTraining");
 }
@@ -651,6 +699,9 @@ function handleRoll() {
 
   gameStarted = true;
   rollInProgress = true;
+  if (turnFirstRollTimestamp === null) {
+    turnFirstRollTimestamp = Date.now();
+  }
   beginTurnTimerIfNeeded();
   playSoundEffect("roll");
 
@@ -682,11 +733,14 @@ function handleScoreTurn() {
   }
 
   if (rollsLeft > 0) {
+    const riskRate = getRiskPenaltyRate();
     showConfirmationModal({
-      eyebrow: "Score early?",
-      title: "Bank this turn now?",
+      eyebrow: "Bank the turn now?",
+      title: "Score before the final roll?",
       message:
-        "All dice are locked, but you still have rolls left. Are you sure you want to score the turn now?",
+        riskRate > 0
+          ? `Scoring now avoids pushing risk mode higher. Your current reroll penalty is ${formatPercentage(riskRate)}.`
+          : "Scoring now ends the turn early and keeps your current score intact.",
       confirmText: "Score Turn",
       cancelText: "Keep Rolling",
       onConfirm: () => finalizeCurrentTurn({ timedOut: false })
@@ -709,20 +763,27 @@ function finalizeCurrentTurn({ timedOut }) {
   clearTurnTimerInterval();
   timeoutPendingScore = false;
 
-  const preview = evaluateCurrentTurn();
+  const preview = evaluateCurrentTurn({ includeBonuses: true });
   const scoringPlayer = currentPlayer;
   const playerName = activeSettings.playerNames[scoringPlayer];
 
   if (preview.scoredChord) {
     playerChordCounts[scoringPlayer][preview.chord] += 1;
     playerUniqueChords[scoringPlayer].add(preview.chord);
+    playerLastScoringPitchClasses[scoringPlayer] = [...preview.lockedPitchClasses];
+    preview.compatibleKeys.forEach((keyName) => {
+      playerKeyCounts[scoringPlayer][keyName] = (playerKeyCounts[scoringPlayer][keyName] || 0) + 1;
+    });
   }
 
   playerScores[scoringPlayer] += preview.totalPoints;
 
   if (preview.bonusAwards.length > 0) {
     preview.bonusAwards.forEach((bonus) => {
-      playerAwardedBonuses[scoringPlayer].add(bonus.id);
+      awardBonusToPlayer(scoringPlayer, bonus);
+      if (bonus.isChordMaestro) {
+        claimedChordMaestros.add(bonus.id);
+      }
     });
     playSoundEffect("bonus");
   }
@@ -738,7 +799,7 @@ function finalizeCurrentTurn({ timedOut }) {
     summaryParts.push(`${playerName} repeated ${preview.chord}, so the turn scores 0.`);
   } else {
     summaryParts.push(
-      `${playerName} banks ${formatPoints(preview.lockedPoints)} locked-note points plus ${formatPoints(preview.chordPoints)} chord points from ${preview.chord}.`
+      `${playerName} banks ${formatPoints(preview.corePointsBeforeRisk)} core points from ${preview.chord}${preview.riskPenaltyRate > 0 ? `, then risk mode trims ${formatPercentage(preview.riskPenaltyRate)} (${formatPoints(preview.riskPenaltyPoints)})` : ""}.`
     );
   }
 
@@ -837,6 +898,10 @@ function toggleDieLock(index) {
   die.locked = !die.locked;
 
   if (die.locked) {
+    if (rollsLeft > 0) {
+      turnLockedBeforeFinalRoll = true;
+    }
+
     if (activeSettings.enableEarTraining) {
       playPianoNote(die.note);
     } else {
@@ -881,8 +946,16 @@ function createFreshGameFromSettings(settings, configured) {
     createChordCountMap()
   );
   playerUniqueChords = Array.from({ length: activeSettings.numberOfPlayers }, () => new Set());
-  playerAwardedBonuses = Array.from({ length: activeSettings.numberOfPlayers }, () => new Set());
+  playerBonusCounts = Array.from({ length: activeSettings.numberOfPlayers }, () => ({}));
+  revealedBonusOrder = [];
+  revealedBonusMeta = {};
+  playerLastScoringPitchClasses = Array.from({ length: activeSettings.numberOfPlayers }, () => []);
+  playerKeyCounts = Array.from({ length: activeSettings.numberOfPlayers }, () => ({}));
+  claimedChordMaestros = new Set();
   resetTurnTimer();
+  turnUsedPlayback = false;
+  turnLockedBeforeFinalRoll = false;
+  turnFirstRollTimestamp = null;
   elements.turnBreakdown.textContent = configured
     ? "Roll when you are ready."
     : "Start setup from the opening screen to choose the rules for your first match.";
@@ -913,6 +986,9 @@ function startNewTurn() {
   rollInProgress = false;
   diceState = createDiceState(activeSettings.numberOfDice);
   resetTurnTimer();
+  turnUsedPlayback = false;
+  turnLockedBeforeFinalRoll = false;
+  turnFirstRollTimestamp = null;
 }
 
 function createDiceState(numberOfDice) {
@@ -944,7 +1020,8 @@ function renderStatus() {
   const lockedNotes = getLockedNotes();
   const lockedTotal = lockedNotes.reduce((sum, note) => sum + (FACE_VALUES[note] || 0), 0);
   const wildIndex = diceState.findIndex((die) => die.isWild);
-  const visibleBonuses = getVisibleBonusDefinitions();
+  const revealedBonuses = getRevealedBonusDefinitions();
+  const riskPenaltyRate = getRiskPenaltyRate();
 
   elements.rollsLeft.textContent = String(rollsLeft);
   elements.totalPointsLocked.textContent = formatPoints(lockedTotal);
@@ -966,14 +1043,14 @@ function renderStatus() {
   } else if (preview.repeatedChordBlocked) {
     elements.turnBreakdown.textContent = `Repeated chord scoring is disabled, so ${preview.chord} would be worth 0 this turn.`;
   } else {
-    const bonusText =
-      preview.bonusAwards.length > 0
-        ? ` Potential bonus: ${preview.bonusAwards
-            .map((bonus) => `${bonus.label} (+${formatPoints(bonus.points)})`)
-            .join(", ")}.`
-        : "";
+    const riskText =
+      preview.riskPenaltyRate > 0
+        ? ` Risk mode is reducing core points by ${formatPercentage(preview.riskPenaltyRate)}.`
+        : activeSettings.enableRiskMode && gameStarted
+          ? " Risk mode is active, but no reroll penalty applies yet."
+          : "";
 
-    elements.turnBreakdown.textContent = `Projected score: ${formatPoints(preview.lockedPoints)} locked-note points + ${formatPoints(preview.chordPoints)} chord points.${bonusText}`;
+    elements.turnBreakdown.textContent = `Projected score: ${formatPoints(preview.corePointsBeforeRisk)} core points${preview.riskPenaltyRate > 0 ? ` - ${formatPoints(preview.riskPenaltyPoints)} risk penalty` : ""} = ${formatPoints(preview.totalPoints)}.${riskText}`;
   }
 
   if (!settingsConfigured) {
@@ -1000,9 +1077,11 @@ function renderStatus() {
     activeSettings.playerNames[currentPlayer]
   )}</span>`;
   elements.bonusTableStatus.textContent =
-    visibleBonuses.length > 0
-      ? `${visibleBonuses.length} live bonus ${visibleBonuses.length === 1 ? "track" : "tracks"} shown for this setup.`
-      : "No bonuses are active for this setup.";
+    !activeSettings.enableBonuses
+      ? "Bonus points are disabled for this match."
+      : revealedBonuses.length > 0
+        ? `${revealedBonuses.length} hidden bonus ${revealedBonuses.length === 1 ? "track is" : "tracks are"} now revealed.`
+        : "Hidden bonuses stay concealed until a player earns one.";
 
   const specialMessages = [];
   if (wildIndex >= 0) {
@@ -1016,6 +1095,9 @@ function renderStatus() {
         ? "The turn timer is running."
         : "The turn timer will start on the first roll."
     );
+  }
+  if (activeSettings.enableRiskMode && gameStarted && riskPenaltyRate > 0) {
+    specialMessages.push(`Current reroll penalty: ${formatPercentage(riskPenaltyRate)}.`);
   }
   elements.specialEventDisplay.textContent = specialMessages.join(" ");
   elements.timerMetric.hidden = !activeSettings.enableTimedTurns;
@@ -1158,8 +1240,8 @@ function renderChordTable() {
 }
 
 function renderBonusTable() {
-  const tableDefinitions = getVisibleBonusDefinitions();
-  const bonusTableVisible = tableDefinitions.length > 0;
+  const tableDefinitions = getRevealedBonusDefinitions();
+  const bonusTableVisible = activeSettings.enableBonuses;
   elements.bonusTableCard.hidden = !bonusTableVisible;
   elements.tableGrid.classList.toggle("is-single", !bonusTableVisible);
 
@@ -1175,32 +1257,30 @@ function renderBonusTable() {
     "</tr>"
   ].join("");
 
-  const body = tableDefinitions.map((bonus) => {
-    const enabled = activeSettings.enableBonuses && activeSettings[bonus.settingKey];
-    const playerCells = playerAwardedBonuses
-      .map((awards, index) => {
-        if (bonus.idPrefix) {
-          const count = getRepeatBonusCount(index, bonus.idPrefix);
-          return count > 0 ? `<td class="claimed-cell">${count}x</td>` : "<td></td>";
-        }
+  const body =
+    tableDefinitions.length === 0
+      ? `<tr><td colspan="${activeSettings.playerNames.length + 2}" class="empty-table-cell">Hidden bonuses will appear here as soon as someone earns them.</td></tr>`
+      : tableDefinitions
+          .map((bonus) => {
+            const playerCells = playerBonusCounts
+              .map((countMap) => {
+                const count = countMap[bonus.id] || 0;
+                return count > 0 ? `<td class="claimed-cell">${count}x</td>` : "<td></td>";
+              })
+              .join("");
 
-        return awards.has(bonus.id)
-          ? `<td class="claimed-cell">+${formatPoints(bonus.points)}</td>`
-          : "<td></td>";
-      })
-      .join("");
-
-    return `
-      <tr class="${enabled ? "" : "bonus-disabled"}">
-        <td>
-          ${escapeHtml(bonus.label)}
-          <span class="table-note">${escapeHtml(bonus.description)}</span>
-        </td>
-        <td>${enabled ? `+${formatPoints(bonus.points)}` : "Off"}</td>
-        ${playerCells}
-      </tr>
-    `;
-  }).join("");
+            return `
+              <tr>
+                <td>
+                  ${escapeHtml(bonus.label)}
+                  <span class="table-note">${escapeHtml(bonus.description)}</span>
+                </td>
+                <td>+${formatPoints(bonus.points)}</td>
+                ${playerCells}
+              </tr>
+            `;
+          })
+          .join("");
 
   elements.bonusTable.querySelector("thead").innerHTML = headers;
   elements.bonusTable.querySelector("tbody").innerHTML = body;
@@ -1221,13 +1301,7 @@ function populateSettingsForm(settings) {
   elements.timedTurnSeconds.value = String(settings.timedTurnSeconds);
   elements.enableWildCardDie.checked = settings.enableWildCardDie;
   elements.enableBonuses.checked = settings.enableBonuses;
-  elements.bonusAllTriads.checked = settings.bonusAllTriads;
-  elements.bonusFourSevenths.checked = settings.bonusFourSevenths;
-  elements.bonusAllFamilies.checked = settings.bonusAllFamilies;
-  elements.bonusExtendedPalette.checked = settings.bonusExtendedPalette;
-  elements.bonusSameTriadFiveTimes.checked = settings.bonusSameTriadFiveTimes;
-  elements.bonusSameSeventhFiveTimes.checked = settings.bonusSameSeventhFiveTimes;
-  elements.bonusSameExtendedFiveTimes.checked = settings.bonusSameExtendedFiveTimes;
+  elements.enableRiskMode.checked = settings.enableRiskMode;
   elements.enableSoundEffects.checked = settings.enableSoundEffects;
   elements.enableEarTraining.checked = settings.enableEarTraining;
   syncPlayerNameInputs(settings.numberOfPlayers);
@@ -1264,10 +1338,6 @@ function updateSettingsFormVisibility() {
   elements.timedTurnField.classList.toggle("is-disabled", !timedTurnsEnabled);
   elements.timedTurnSeconds.disabled = !timedTurnsEnabled;
   elements.bonusOptions.classList.toggle("is-disabled", !bonusesEnabled);
-
-  Array.from(elements.bonusOptions.querySelectorAll("input")).forEach((input) => {
-    input.disabled = !bonusesEnabled;
-  });
 }
 
 function getSettingsFromForm() {
@@ -1311,13 +1381,7 @@ function getSettingsFromForm() {
     timedTurnSeconds,
     enableWildCardDie: elements.enableWildCardDie.checked,
     enableBonuses: elements.enableBonuses.checked,
-    bonusAllTriads: elements.bonusAllTriads.checked,
-    bonusFourSevenths: elements.bonusFourSevenths.checked,
-    bonusAllFamilies: elements.bonusAllFamilies.checked,
-    bonusExtendedPalette: elements.bonusExtendedPalette.checked,
-    bonusSameTriadFiveTimes: elements.bonusSameTriadFiveTimes.checked,
-    bonusSameSeventhFiveTimes: elements.bonusSameSeventhFiveTimes.checked,
-    bonusSameExtendedFiveTimes: elements.bonusSameExtendedFiveTimes.checked,
+    enableRiskMode: elements.enableRiskMode.checked,
     enableSoundEffects: elements.enableSoundEffects.checked,
     enableEarTraining: elements.enableEarTraining.checked
   };
@@ -1434,7 +1498,7 @@ function identifyChord(diceValues) {
   return "None";
 }
 
-function evaluateCurrentTurn() {
+function evaluateCurrentTurn({ includeBonuses = false } = {}) {
   const lockedNotes = getLockedNotes();
   const chord = identifyChord(lockedNotes);
   const lockedPoints = lockedNotes.reduce((sum, note) => sum + (FACE_VALUES[note] || 0), 0);
@@ -1443,12 +1507,25 @@ function evaluateCurrentTurn() {
     chord !== "None" &&
     !activeSettings.allowRepeatedChordTypes &&
     playerChordCounts[currentPlayer][chord] > 0;
+  const corePointsBeforeRisk = chord === "None" || repeatedChordBlocked ? 0 : lockedPoints + chordPoints;
+  const riskPenaltyRate = chord === "None" || repeatedChordBlocked ? 0 : getRiskPenaltyRate();
+  const riskPenaltyPoints = corePointsBeforeRisk * riskPenaltyRate;
+  const scoredCorePoints = corePointsBeforeRisk - riskPenaltyPoints;
+  const lockedPitchClasses = getPitchClassesFromNotes(lockedNotes);
+  const compatibleKeys = getCompatibleKeyNamesForNotes(lockedNotes);
 
   if (chord === "None" || repeatedChordBlocked) {
     return {
       chord,
+      lockedNotes,
+      lockedPitchClasses,
+      compatibleKeys,
       lockedPoints,
       chordPoints,
+      corePointsBeforeRisk: 0,
+      riskPenaltyRate: 0,
+      riskPenaltyPoints: 0,
+      scoredCorePoints: 0,
       repeatedChordBlocked,
       scoredChord: false,
       bonusAwards: [],
@@ -1457,22 +1534,29 @@ function evaluateCurrentTurn() {
     };
   }
 
-  const bonusAwards = findNewBonuses(currentPlayer, chord);
+  const bonusAwards = includeBonuses ? findNewBonuses(currentPlayer, chord, lockedNotes, lockedPitchClasses, compatibleKeys) : [];
   const bonusPoints = bonusAwards.reduce((sum, bonus) => sum + bonus.points, 0);
 
   return {
     chord,
+    lockedNotes,
+    lockedPitchClasses,
+    compatibleKeys,
     lockedPoints,
     chordPoints,
+    corePointsBeforeRisk,
+    riskPenaltyRate,
+    riskPenaltyPoints,
+    scoredCorePoints,
     repeatedChordBlocked: false,
-    scoredChord: chord !== "None",
+    scoredChord: true,
     bonusAwards,
     bonusPoints,
-    totalPoints: lockedPoints + chordPoints + bonusPoints
+    totalPoints: scoredCorePoints + bonusPoints
   };
 }
 
-function findNewBonuses(playerIndex, prospectiveChord) {
+function findNewBonuses(playerIndex, prospectiveChord, lockedNotes, lockedPitchClasses, compatibleKeys) {
   if (!activeSettings.enableBonuses || prospectiveChord === "None") {
     return [];
   }
@@ -1480,32 +1564,49 @@ function findNewBonuses(playerIndex, prospectiveChord) {
   const uniqueChords = new Set(playerUniqueChords[playerIndex]);
   uniqueChords.add(prospectiveChord);
 
-  const awards = BONUS_DEFINITIONS.filter((bonus) => {
-    return (
-      activeSettings[bonus.settingKey] &&
-      !playerAwardedBonuses[playerIndex].has(bonus.id) &&
-      bonus.qualifies(uniqueChords)
-    );
-  });
-
+  const previousPitchClasses = playerLastScoringPitchClasses[playerIndex] || [];
+  const sharedNoteCount = countSharedPitchClasses(previousPitchClasses, lockedPitchClasses);
   const prospectiveCount = playerChordCounts[playerIndex][prospectiveChord] + 1;
-  const chordNoteCount = CHORD_NOTE_COUNTS[prospectiveChord];
+  const context = {
+    scoredChord: true,
+    rollsLeft,
+    uniqueChords,
+    sharedNoteCount,
+    compatibleKeys,
+    playerKeyCounts: playerKeyCounts[playerIndex],
+    prospectiveChord,
+    prospectiveCount,
+    turnUsedPlayback,
+    turnLockedBeforeFinalRoll,
+    turnFirstRollTimestamp
+  };
 
-  REPEAT_MILESTONE_DEFINITIONS.forEach((bonus) => {
-    const dynamicId = `${bonus.idPrefix}:${prospectiveChord}`;
-    if (
-      activeSettings[bonus.settingKey] &&
-      chordNoteCount === bonus.noteCount &&
-      prospectiveCount === 5 &&
-      !playerAwardedBonuses[playerIndex].has(dynamicId)
-    ) {
-      awards.push({
-        ...bonus,
-        id: dynamicId,
-        label: `${bonus.label}: ${prospectiveChord}`
-      });
+  const awards = HIDDEN_BONUS_DEFINITIONS.filter((bonus) => {
+    if (activeSettings.numberOfDice < bonus.minDice) {
+      return false;
     }
-  });
+
+    const alreadyCount = playerBonusCounts[playerIndex][bonus.id] || 0;
+    if (!bonus.repeatable && alreadyCount > 0) {
+      return false;
+    }
+
+    return bonus.qualifies(context);
+  }).map((bonus) => ({ ...bonus }));
+
+  const chordMaestroId = `maestro:${prospectiveChord}`;
+  if (prospectiveCount === 3 && !claimedChordMaestros.has(chordMaestroId)) {
+    awards.push({
+      id: chordMaestroId,
+      label: `${toTitleCase(prospectiveChord)} Maestro`,
+      points: BASE_CHORD_POINTS[prospectiveChord] * 3,
+      minDice: CHORD_NOTE_COUNTS[prospectiveChord],
+      repeatable: false,
+      description: `Be the first player to score ${prospectiveChord} 3 times.`,
+      isChordMaestro: true,
+      chordType: prospectiveChord
+    });
+  }
 
   return awards;
 }
@@ -1577,12 +1678,13 @@ function buildSettingsSummary(settings) {
   const repeatRule = settings.allowRepeatedChordTypes
     ? "repeats score again"
     : "repeats score 0";
-  const bonusRule = settings.enableBonuses ? "bonuses on" : "bonuses off";
+  const bonusRule = settings.enableBonuses ? "hidden bonuses on" : "bonuses off";
   const timerRule = settings.enableTimedTurns
     ? `${settings.timedTurnSeconds}s timer`
     : "no turn timer";
   const wildRule = settings.enableWildCardDie ? "rare wildcard on" : "wildcard off";
-  return `${settings.numberOfDice} dice, ${settings.numberOfPlayers} players, ${pitchPool}, ${repeatRule}, ${bonusRule}, ${timerRule}, ${wildRule}, ear training ${settings.enableEarTraining ? "on" : "off"}, sound effects ${settings.enableSoundEffects ? "on" : "off"}.`;
+  const riskRule = settings.enableRiskMode ? "risk mode on" : "risk mode off";
+  return `${settings.numberOfDice} dice, ${settings.numberOfPlayers} players, ${pitchPool}, ${repeatRule}, ${bonusRule}, ${riskRule}, ${timerRule}, ${wildRule}, ear training ${settings.enableEarTraining ? "on" : "off"}, sound effects ${settings.enableSoundEffects ? "on" : "off"}.`;
 }
 
 function getVisibleChordTypes() {
@@ -1591,20 +1693,10 @@ function getVisibleChordTypes() {
   );
 }
 
-function getVisibleBonusDefinitions() {
-  if (!activeSettings.enableBonuses) {
-    return [];
-  }
-
-  return [...BONUS_DEFINITIONS, ...REPEAT_MILESTONE_DEFINITIONS].filter((bonus) => {
-    return activeSettings[bonus.settingKey] && activeSettings.numberOfDice >= bonus.minDice;
-  });
-}
-
-function getRepeatBonusCount(playerIndex, idPrefix) {
-  return Array.from(playerAwardedBonuses[playerIndex]).filter((id) =>
-    id.startsWith(`${idPrefix}:`)
-  ).length;
+function getRevealedBonusDefinitions() {
+  return revealedBonusOrder
+    .map((id) => revealedBonusMeta[id])
+    .filter((bonus) => bonus && activeSettings.numberOfDice >= bonus.minDice);
 }
 
 function areAllDiceLocked() {
@@ -1612,7 +1704,7 @@ function areAllDiceLocked() {
 }
 
 function canScoreTurnNow() {
-  return rollsLeft === 0 || areAllDiceLocked();
+  return diceState.some((die) => die.note);
 }
 
 function canPlayLockedNotes() {
@@ -1629,6 +1721,81 @@ function buildWinConditionLabel(settings) {
   return settings.winCondition === "rounds"
     ? `Highest score after ${settings.roundLimit} rounds`
     : `First player to ${formatPoints(settings.targetScore)} points`;
+}
+
+function getRiskPenaltyRate() {
+  if (!activeSettings.enableRiskMode) {
+    return 0;
+  }
+
+  const rollsTaken = 3 - rollsLeft;
+  const rerollsUsed = Math.max(0, rollsTaken - 1);
+  return rerollsUsed * 0.05;
+}
+
+function formatPercentage(value) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function getPitchClassesFromNotes(notes) {
+  return [...new Set(notes.map((note) => getNoteIndexFromC(note)))].sort((left, right) => left - right);
+}
+
+function countSharedPitchClasses(previousPitchClasses, currentPitchClasses) {
+  const previous = new Set(previousPitchClasses || []);
+  return (currentPitchClasses || []).filter((pitchClass) => previous.has(pitchClass)).length;
+}
+
+function buildKeySignatures() {
+  return PITCH_NAMES_FROM_C.flatMap((tonic, index) => {
+    const majorPitchClasses = MAJOR_KEY_INTERVALS.map((interval) => (index + interval) % 12);
+    const minorPitchClasses = NATURAL_MINOR_KEY_INTERVALS.map((interval) => (index + interval) % 12);
+
+    return [
+      {
+        name: `${tonic} major`,
+        pitchClasses: majorPitchClasses
+      },
+      {
+        name: `${tonic} minor`,
+        pitchClasses: minorPitchClasses
+      }
+    ];
+  });
+}
+
+function getCompatibleKeyNamesForNotes(notes) {
+  const pitchClasses = getPitchClassesFromNotes(notes);
+  if (pitchClasses.length === 0) {
+    return [];
+  }
+
+  return KEY_SIGNATURES.filter((keySignature) =>
+    pitchClasses.every((pitchClass) => keySignature.pitchClasses.includes(pitchClass))
+  ).map((keySignature) => keySignature.name);
+}
+
+function awardBonusToPlayer(playerIndex, bonus) {
+  playerBonusCounts[playerIndex][bonus.id] = (playerBonusCounts[playerIndex][bonus.id] || 0) + 1;
+
+  if (!revealedBonusMeta[bonus.id]) {
+    revealedBonusMeta[bonus.id] = {
+      id: bonus.id,
+      label: bonus.label,
+      points: bonus.points,
+      minDice: bonus.minDice,
+      description: bonus.description,
+      repeatable: bonus.repeatable
+    };
+    revealedBonusOrder.push(bonus.id);
+  }
+}
+
+function toTitleCase(value) {
+  return String(value)
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function formatPoints(value) {
@@ -2029,6 +2196,7 @@ function playPianoNote(note) {
 
 function playLockedNotes(mode) {
   const lockedNotes = getLockedNotes();
+  turnUsedPlayback = true;
   if (lockedNotes.length === 0) {
     return;
   }
