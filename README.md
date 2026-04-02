@@ -1,4 +1,4 @@
-This is the readme file for Musical Yahtzee! 
+This is the readme file for Chord Dice Game! 
 
 Current features include
 
