@@ -235,17 +235,6 @@ const PLAYER_COLORS = [
 
 const HIDDEN_BONUS_DEFINITIONS = [
   {
-    id: "clutchComposer",
-    label: "Clutch Composer",
-    points: 40,
-    minDice: 3,
-    repeatable: true,
-    description: "Score a valid chord on the final roll.",
-    qualifies(context) {
-      return context.scoredChord && context.rollsLeft === 0;
-    }
-  },
-  {
     id: "perfectEar",
     label: "Perfect Ear",
     points: 10,
@@ -279,14 +268,14 @@ const HIDDEN_BONUS_DEFINITIONS = [
     }
   },
   {
-    id: "keyLoyalty",
-    label: "Key Loyalty",
+    id: "tonalCenterLoyalty",
+    label: "Tonal Center Loyalty",
     points: 50,
     minDice: 3,
     repeatable: false,
-    description: "Score notes from the same compatible key on 3 turns.",
+    description: "Score 3 chords that share the same root note as tonal center.",
     qualifies(context) {
-      return context.scoredChord && context.compatibleKeys.some((keyName) => (context.playerKeyCounts[keyName] || 0) + 1 >= 3);
+      return context.scoredChord && context.rootNoteName && ((context.playerRootCounts[context.rootNoteName] || 0) + 1 >= 3);
     }
   },
   {
@@ -443,7 +432,7 @@ let playerBonusCounts = [];
 let revealedBonusOrder = [];
 let revealedBonusMeta = {};
 let playerLastScoringPitchClasses = [];
-let playerKeyCounts = [];
+let playerRootCounts = [];
 let claimedChordMaestros = new Set();
 let gameStarted = false;
 let gameOver = false;
@@ -771,9 +760,10 @@ function finalizeCurrentTurn({ timedOut }) {
     playerChordCounts[scoringPlayer][preview.chord] += 1;
     playerUniqueChords[scoringPlayer].add(preview.chord);
     playerLastScoringPitchClasses[scoringPlayer] = [...preview.lockedPitchClasses];
-    preview.compatibleKeys.forEach((keyName) => {
-      playerKeyCounts[scoringPlayer][keyName] = (playerKeyCounts[scoringPlayer][keyName] || 0) + 1;
-    });
+    if (preview.rootNoteName) {
+      playerRootCounts[scoringPlayer][preview.rootNoteName] =
+        (playerRootCounts[scoringPlayer][preview.rootNoteName] || 0) + 1;
+    }
   }
 
   playerScores[scoringPlayer] += preview.totalPoints;
@@ -950,7 +940,7 @@ function createFreshGameFromSettings(settings, configured) {
   revealedBonusOrder = [];
   revealedBonusMeta = {};
   playerLastScoringPitchClasses = Array.from({ length: activeSettings.numberOfPlayers }, () => []);
-  playerKeyCounts = Array.from({ length: activeSettings.numberOfPlayers }, () => ({}));
+  playerRootCounts = Array.from({ length: activeSettings.numberOfPlayers }, () => ({}));
   claimedChordMaestros = new Set();
   resetTurnTimer();
   turnUsedPlayback = false;
@@ -1028,12 +1018,16 @@ function renderStatus() {
   elements.projectedTurnPoints.textContent = formatPoints(preview.totalPoints);
 
   if (preview.chord === "None") {
+    elements.chordDisplay.classList.remove("is-detected");
     elements.chordDisplay.textContent =
       lockedNotes.length === 0
         ? "Lock notes after your first roll to start building a chord."
         : "Current lock-in does not match a scoring chord yet.";
   } else {
     elements.chordDisplay.textContent = `${preview.chord} detected. Base chord value: ${formatPoints(preview.chordPoints)}.`;
+    elements.chordDisplay.classList.remove("is-detected");
+    void elements.chordDisplay.offsetWidth;
+    elements.chordDisplay.classList.add("is-detected");
   }
 
   if (preview.chord === "None") {
@@ -1140,6 +1134,8 @@ function renderButtons() {
 
 function renderDice(rollingIndices = []) {
   const availableFaces = getAvailableDiceFaces();
+  const preview = evaluateCurrentTurn();
+  const hasRecognizedChord = preview.scoredChord;
   elements.diceContainer.innerHTML = "";
 
   diceState.forEach((die, index) => {
@@ -1157,6 +1153,9 @@ function renderDice(rollingIndices = []) {
     }
     if (rollingIndices.includes(index)) {
       dieButton.classList.add("is-rolling");
+    }
+    if (hasRecognizedChord && die.locked) {
+      dieButton.classList.add("is-valid-chord");
     }
 
     dieButton.setAttribute("aria-label", buildDieAriaLabel(die, index));
@@ -1263,8 +1262,17 @@ function renderBonusTable() {
       : tableDefinitions
           .map((bonus) => {
             const playerCells = playerBonusCounts
-              .map((countMap) => {
+              .map((countMap, playerIndex) => {
                 const count = countMap[bonus.id] || 0;
+
+                if (bonus.id === "tonalCenterLoyalty") {
+                  const progress = getTonalCenterProgressLabel(playerIndex);
+                  if (count > 0) {
+                    return `<td class="claimed-cell">${escapeHtml(progress)} • ${count}x</td>`;
+                  }
+                  return progress ? `<td>${escapeHtml(progress)}</td>` : "<td></td>";
+                }
+
                 return count > 0 ? `<td class="claimed-cell">${count}x</td>` : "<td></td>";
               })
               .join("");
@@ -1498,6 +1506,15 @@ function identifyChord(diceValues) {
   return "None";
 }
 
+function getRootNoteNameForChord(notes, chord) {
+  if (chord === "None") {
+    return "";
+  }
+
+  const rootPitchClass = getRootPitchClassForChord(notes, chord);
+  return rootPitchClass === null ? "" : PITCH_NAMES_FROM_C[rootPitchClass];
+}
+
 function evaluateCurrentTurn({ includeBonuses = false } = {}) {
   const lockedNotes = getLockedNotes();
   const chord = identifyChord(lockedNotes);
@@ -1513,6 +1530,8 @@ function evaluateCurrentTurn({ includeBonuses = false } = {}) {
   const scoredCorePoints = corePointsBeforeRisk - riskPenaltyPoints;
   const lockedPitchClasses = getPitchClassesFromNotes(lockedNotes);
   const compatibleKeys = getCompatibleKeyNamesForNotes(lockedNotes);
+  const rootPitchClass = chord === "None" ? null : getRootPitchClassForChord(lockedNotes, chord);
+  const rootNoteName = rootPitchClass === null ? "" : PITCH_NAMES_FROM_C[rootPitchClass];
 
   if (chord === "None" || repeatedChordBlocked) {
     return {
@@ -1520,6 +1539,8 @@ function evaluateCurrentTurn({ includeBonuses = false } = {}) {
       lockedNotes,
       lockedPitchClasses,
       compatibleKeys,
+      rootPitchClass,
+      rootNoteName,
       lockedPoints,
       chordPoints,
       corePointsBeforeRisk: 0,
@@ -1542,6 +1563,8 @@ function evaluateCurrentTurn({ includeBonuses = false } = {}) {
     lockedNotes,
     lockedPitchClasses,
     compatibleKeys,
+    rootPitchClass,
+    rootNoteName,
     lockedPoints,
     chordPoints,
     corePointsBeforeRisk,
@@ -1573,7 +1596,8 @@ function findNewBonuses(playerIndex, prospectiveChord, lockedNotes, lockedPitchC
     uniqueChords,
     sharedNoteCount,
     compatibleKeys,
-    playerKeyCounts: playerKeyCounts[playerIndex],
+    rootNoteName: getRootNoteNameForChord(lockedNotes, prospectiveChord),
+    playerRootCounts: playerRootCounts[playerIndex],
     prospectiveChord,
     prospectiveCount,
     turnUsedPlayback,
@@ -1697,6 +1721,18 @@ function getRevealedBonusDefinitions() {
   return revealedBonusOrder
     .map((id) => revealedBonusMeta[id])
     .filter((bonus) => bonus && activeSettings.numberOfDice >= bonus.minDice);
+}
+
+function getTonalCenterProgressLabel(playerIndex) {
+  const rootCounts = playerRootCounts[playerIndex] || {};
+  const entries = Object.entries(rootCounts);
+
+  if (entries.length === 0) {
+    return "";
+  }
+
+  const [bestRoot, bestCount] = entries.sort((left, right) => right[1] - left[1])[0];
+  return `${bestRoot}: ${Math.min(bestCount, 3)}/3`;
 }
 
 function areAllDiceLocked() {
@@ -2061,14 +2097,22 @@ function getLogicalChordMidiNotes(notes, chord) {
 function playPianoFrequency(frequency, startOffset = 0, duration = 1.2, gainScale = 1) {
   const context = ensureAudioContext();
   const startTime = context.currentTime + startOffset;
+  const velocityJitter = 0.94 + Math.random() * 0.14;
+  const detuneHumanize = () => (Math.random() - 0.5) * 6;
 
   const masterGain = context.createGain();
-  const filter = context.createBiquadFilter();
+  const toneFilter = context.createBiquadFilter();
+  const bodyFilter = context.createBiquadFilter();
   const compressor = context.createDynamicsCompressor();
 
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(3600, startTime);
-  filter.Q.value = 0.8;
+  toneFilter.type = "lowpass";
+  toneFilter.frequency.setValueAtTime(3200 + Math.random() * 500, startTime);
+  toneFilter.Q.value = 0.9;
+
+  bodyFilter.type = "peaking";
+  bodyFilter.frequency.setValueAtTime(900, startTime);
+  bodyFilter.Q.value = 0.8;
+  bodyFilter.gain.setValueAtTime(2.5, startTime);
 
   compressor.threshold.value = -24;
   compressor.knee.value = 18;
@@ -2076,63 +2120,71 @@ function playPianoFrequency(frequency, startOffset = 0, duration = 1.2, gainScal
   compressor.attack.value = 0.003;
   compressor.release.value = 0.22;
 
+  const peakGain = 0.2 * gainScale * velocityJitter;
+  const sustainGain = 0.075 * gainScale * velocityJitter;
   masterGain.gain.setValueAtTime(0.0001, startTime);
-  masterGain.gain.exponentialRampToValueAtTime(0.22 * gainScale, startTime + 0.008);
-  masterGain.gain.exponentialRampToValueAtTime(0.08 * gainScale, startTime + 0.09);
+  masterGain.gain.linearRampToValueAtTime(peakGain, startTime + 0.005);
+  masterGain.gain.exponentialRampToValueAtTime(sustainGain, startTime + 0.08);
   masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
-  masterGain.connect(filter);
-  filter.connect(compressor);
+  masterGain.connect(toneFilter);
+  toneFilter.connect(bodyFilter);
+  bodyFilter.connect(compressor);
   compressor.connect(context.destination);
 
   const partials = [
     {
       ratio: 1,
-      gain: 0.9,
+      gain: 0.86,
       type: "triangle",
-      detune: -2,
       release: Math.max(0.18, duration - 0.02)
     },
     {
       ratio: 2,
-      gain: 0.34,
+      gain: 0.26,
       type: "sine",
-      detune: 1,
-      release: Math.max(0.16, duration - 0.28)
+      release: Math.max(0.16, duration - 0.24)
     },
     {
       ratio: 3,
-      gain: 0.12,
+      gain: 0.09,
       type: "sine",
-      detune: -3,
-      release: Math.max(0.14, duration - 0.48)
+      release: Math.max(0.14, duration - 0.42)
     }
   ];
 
-  partials.forEach((partial) => {
+  partials.forEach((partial, index) => {
     const oscillator = context.createOscillator();
     const partialGain = context.createGain();
 
     oscillator.type = partial.type;
     oscillator.frequency.setValueAtTime(frequency * partial.ratio, startTime);
-    oscillator.detune.value = partial.detune;
+    oscillator.detune.setValueAtTime(detuneHumanize() + index * 0.6, startTime);
 
-    partialGain.gain.setValueAtTime(partial.gain * gainScale, startTime);
+    const partialPeak = partial.gain * gainScale * velocityJitter;
+    partialGain.gain.setValueAtTime(0.0001, startTime);
+    partialGain.gain.linearRampToValueAtTime(partialPeak, startTime + 0.004 + index * 0.002);
     partialGain.gain.exponentialRampToValueAtTime(0.0001, startTime + partial.release);
 
     oscillator.connect(partialGain);
     partialGain.connect(masterGain);
     oscillator.start(startTime);
-    oscillator.stop(startTime + duration + 0.02);
+    oscillator.stop(startTime + duration + 0.05);
   });
 
   const hammerOscillator = context.createOscillator();
   const hammerGain = context.createGain();
+  const hammerFilter = context.createBiquadFilter();
   hammerOscillator.type = "square";
-  hammerOscillator.frequency.setValueAtTime(frequency * 4, startTime);
-  hammerGain.gain.setValueAtTime(0.02 * gainScale, startTime);
-  hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
-  hammerOscillator.connect(hammerGain);
+  hammerOscillator.frequency.setValueAtTime(frequency * 5.1, startTime);
+  hammerOscillator.detune.setValueAtTime(detuneHumanize() * 2, startTime);
+  hammerFilter.type = "bandpass";
+  hammerFilter.frequency.setValueAtTime(Math.min(6000, frequency * 8), startTime);
+  hammerFilter.Q.value = 1.4;
+  hammerGain.gain.setValueAtTime(0.03 * gainScale * velocityJitter, startTime);
+  hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.025);
+  hammerOscillator.connect(hammerFilter);
+  hammerFilter.connect(hammerGain);
   hammerGain.connect(masterGain);
   hammerOscillator.start(startTime);
   hammerOscillator.stop(startTime + 0.03);
@@ -2162,12 +2214,17 @@ function playSoundEffect(type) {
     sequence.forEach((frequency, index) => {
       const oscillator = context.createOscillator();
       const gainNode = context.createGain();
+      const filter = context.createBiquadFilter();
       oscillator.type = type === "roll" ? "triangle" : "sine";
-      oscillator.frequency.value = frequency;
+      oscillator.frequency.setValueAtTime(frequency, startTime + index * 0.08);
+      oscillator.detune.setValueAtTime((Math.random() - 0.5) * 8, startTime + index * 0.08);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(type === "roll" ? 2200 : 3000, startTime + index * 0.08);
       gainNode.gain.setValueAtTime(0.0001, startTime + index * 0.08);
-      gainNode.gain.exponentialRampToValueAtTime(0.04, startTime + index * 0.08 + 0.01);
+      gainNode.gain.linearRampToValueAtTime(0.045 + Math.random() * 0.01, startTime + index * 0.08 + 0.008);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + index * 0.08 + 0.14);
-      oscillator.connect(gainNode);
+      oscillator.connect(filter);
+      filter.connect(gainNode);
       gainNode.connect(context.destination);
       oscillator.start(startTime + index * 0.08);
       oscillator.stop(startTime + index * 0.08 + 0.15);
