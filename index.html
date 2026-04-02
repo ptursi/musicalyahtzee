@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Musical Yahtzee</title>
+    <title>Chord Dice Game</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -16,7 +16,7 @@
     <section id="landingScreen" class="landing-screen is-open" aria-labelledby="landingTitle">
       <div class="landing-card">
         <p class="eyebrow">A polished music theory dice duel</p>
-        <h1 id="landingTitle">Musical Yahtzee</h1>
+        <h1 id="landingTitle">Chord Dice Game</h1>
         <p class="landing-copy">
           Shape chords, chase bonuses, race the timer, and sharpen your ear with every locked
           note.
@@ -73,10 +73,10 @@
           &times;
         </button>
         <p class="modal-eyebrow">Game setup</p>
-        <h2>Musical Yahtzee Settings</h2>
+        <h2>Chord Dice Game Settings</h2>
         <p class="modal-copy">
           Save your rules before the first roll. Player names, sound effects, and ear training can
-          update live mid-game, while gameplay rule changes still restart the match.
+          update live mid-game, while all other settings will require a match restart.
         </p>
 
         <form id="settingsForm">
@@ -124,12 +124,14 @@
                 <input type="checkbox" id="allowRepeatedChordTypes" checked />
                 <span>Allow repeated chord types to score again</span>
               </label>
+              <p class="setting-help">
+                When this is off, repeating a chord type you already claimed earns 0 points.
+              </p>
               <label class="toggle-row">
                 <input type="checkbox" id="enableRiskMode" checked />
                 <span>Enable risk mode (-5% core points per reroll)</span>
               </label>
               <p class="setting-help">
-                When this is off, repeating a chord type you already claimed earns 0 points.
                 Risk mode starts after the first roll and adds pressure to stop early.
               </p>
             </section>
@@ -187,8 +189,7 @@
               </label>
               <div id="bonusOptions" class="bonus-option-list">
                 <p class="setting-help">
-                  All bonuses stay hidden until earned. This includes tension bonuses, set bonuses,
-                  and chord-type maestro awards.
+                  All bonuses stay hidden until earned.
                 </p>
               </div>
             </section>
@@ -224,7 +225,7 @@
         <header class="game-header">
           <div>
             <p class="eyebrow">Harmony plus strategy</p>
-            <h1>Musical Yahtzee</h1>
+            <h1>Chord Dice Game</h1>
             <p class="subtitle">
               Lock notes, build chords, collect theory bonuses, and race to your chosen victory
               rule.
@@ -295,7 +296,7 @@
         </section>
 
         <section class="dice-section">
-          <div id="diceContainer" class="dice-container" aria-label="Musical dice"></div>
+          <div id="diceContainer" class="dice-container" aria-label="Chord dice"></div>
         </section>
 
         <div class="button-row">
