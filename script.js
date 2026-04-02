@@ -1018,12 +1018,16 @@ function renderStatus() {
   elements.projectedTurnPoints.textContent = formatPoints(preview.totalPoints);
 
   if (preview.chord === "None") {
+    elements.chordDisplay.classList.remove("is-detected");
     elements.chordDisplay.textContent =
       lockedNotes.length === 0
         ? "Lock notes after your first roll to start building a chord."
         : "Current lock-in does not match a scoring chord yet.";
   } else {
     elements.chordDisplay.textContent = `${preview.chord} detected. Base chord value: ${formatPoints(preview.chordPoints)}.`;
+    elements.chordDisplay.classList.remove("is-detected");
+    void elements.chordDisplay.offsetWidth;
+    elements.chordDisplay.classList.add("is-detected");
   }
 
   if (preview.chord === "None") {
@@ -1130,7 +1134,10 @@ function renderButtons() {
 
 function renderDice(rollingIndices = []) {
   const availableFaces = getAvailableDiceFaces();
+  const preview = evaluateCurrentTurn();
+  const hasRecognizedChord = preview.scoredChord;
   elements.diceContainer.innerHTML = "";
+  elements.diceContainer.dataset.diceCount = String(diceState.length);
 
   diceState.forEach((die, index) => {
     const dieStack = document.createElement("div");
@@ -1139,15 +1146,10 @@ function renderDice(rollingIndices = []) {
     const dieButton = document.createElement("button");
     dieButton.type = "button";
     dieButton.className = "dice";
-    if (die.locked) {
-      dieButton.classList.add("is-locked");
-    }
-    if (die.isWild) {
-      dieButton.classList.add("is-wild");
-    }
-    if (rollingIndices.includes(index)) {
-      dieButton.classList.add("is-rolling");
-    }
+    if (die.locked) dieButton.classList.add("is-locked");
+    if (die.isWild) dieButton.classList.add("is-wild");
+    if (rollingIndices.includes(index)) dieButton.classList.add("is-rolling");
+    if (hasRecognizedChord && die.locked) dieButton.classList.add("is-valid-chord");
 
     dieButton.setAttribute("aria-label", buildDieAriaLabel(die, index));
     dieButton.innerHTML = `
@@ -1156,42 +1158,33 @@ function renderDice(rollingIndices = []) {
       <span class="dice-corner dice-corner-c"></span>
       <span class="dice-corner dice-corner-d"></span>
       ${die.isWild ? '<span class="dice-badge">Wild</span>' : ""}
-      <span class="dice-note${die.note ? "" : " dice-note-placeholder"}">${escapeHtml(
-        die.note || "--"
-      )}</span>
+      <span class="dice-note${die.note ? "" : " dice-note-placeholder"}">${escapeHtml(die.note || "--")}</span>
       <span class="dice-subtext">${escapeHtml(getDieSubtext(die))}</span>
     `;
-    dieButton.addEventListener("click", () => toggleDieLock(index));
-    dieStack.appendChild(dieButton);
 
     if (die.isWild) {
-      const wildControl = document.createElement("label");
-      wildControl.className = `wild-note-control${die.note ? "" : " is-disabled"}`;
-
-      const label = document.createElement("span");
-      label.textContent = die.note ? "Tune the wildcard" : "Roll first, then tune";
-
-      const select = document.createElement("select");
+      const wildSelect = document.createElement("select");
+      wildSelect.className = "wild-inline-select";
+      if (!die.note) wildSelect.classList.add("is-disabled");
+      wildSelect.setAttribute("aria-label", `Tune wildcard die ${index + 1}`);
       availableFaces.forEach((face) => {
         const option = document.createElement("option");
         option.value = face;
         option.textContent = face;
-        select.appendChild(option);
+        wildSelect.appendChild(option);
       });
-
-      select.value = die.note && availableFaces.includes(die.note) ? die.note : availableFaces[0];
-      select.disabled = !die.note || !settingsConfigured || gameOver || rollInProgress;
-      select.addEventListener("click", (event) => event.stopPropagation());
-      select.addEventListener("change", (event) => {
+      wildSelect.value = die.note && availableFaces.includes(die.note) ? die.note : availableFaces[0];
+      wildSelect.disabled = !die.note || !settingsConfigured || gameOver || rollInProgress;
+      wildSelect.addEventListener("click", (event) => event.stopPropagation());
+      wildSelect.addEventListener("change", (event) => {
         event.stopPropagation();
         changeWildDieNote(index, event.target.value);
       });
-
-      wildControl.appendChild(label);
-      wildControl.appendChild(select);
-      dieStack.appendChild(wildControl);
+      dieButton.appendChild(wildSelect);
     }
 
+    dieButton.addEventListener("click", () => toggleDieLock(index));
+    dieStack.appendChild(dieButton);
     elements.diceContainer.appendChild(dieStack);
   });
 }
@@ -1253,8 +1246,17 @@ function renderBonusTable() {
       : tableDefinitions
           .map((bonus) => {
             const playerCells = playerBonusCounts
-              .map((countMap) => {
+              .map((countMap, playerIndex) => {
                 const count = countMap[bonus.id] || 0;
+
+                if (bonus.id === "tonalCenterLoyalty") {
+                  const progress = getTonalCenterProgressLabel(playerIndex);
+                  if (count > 0) {
+                    return `<td class="claimed-cell">${escapeHtml(progress)} • ${count}x</td>`;
+                  }
+                  return progress ? `<td>${escapeHtml(progress)}</td>` : "<td></td>";
+                }
+
                 return count > 0 ? `<td class="claimed-cell">${count}x</td>` : "<td></td>";
               })
               .join("");
@@ -1705,6 +1707,18 @@ function getRevealedBonusDefinitions() {
     .filter((bonus) => bonus && activeSettings.numberOfDice >= bonus.minDice);
 }
 
+function getTonalCenterProgressLabel(playerIndex) {
+  const rootCounts = playerRootCounts[playerIndex] || {};
+  const entries = Object.entries(rootCounts);
+
+  if (entries.length === 0) {
+    return "";
+  }
+
+  const [bestRoot, bestCount] = entries.sort((left, right) => right[1] - left[1])[0];
+  return `${bestRoot}: ${Math.min(bestCount, 3)}/3`;
+}
+
 function areAllDiceLocked() {
   return diceState.length > 0 && diceState.every((die) => die.note && die.locked);
 }
@@ -2067,14 +2081,22 @@ function getLogicalChordMidiNotes(notes, chord) {
 function playPianoFrequency(frequency, startOffset = 0, duration = 1.2, gainScale = 1) {
   const context = ensureAudioContext();
   const startTime = context.currentTime + startOffset;
+  const velocityJitter = 0.94 + Math.random() * 0.14;
+  const detuneHumanize = () => (Math.random() - 0.5) * 6;
 
   const masterGain = context.createGain();
-  const filter = context.createBiquadFilter();
+  const toneFilter = context.createBiquadFilter();
+  const bodyFilter = context.createBiquadFilter();
   const compressor = context.createDynamicsCompressor();
 
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(3600, startTime);
-  filter.Q.value = 0.8;
+  toneFilter.type = "lowpass";
+  toneFilter.frequency.setValueAtTime(3200 + Math.random() * 500, startTime);
+  toneFilter.Q.value = 0.9;
+
+  bodyFilter.type = "peaking";
+  bodyFilter.frequency.setValueAtTime(900, startTime);
+  bodyFilter.Q.value = 0.8;
+  bodyFilter.gain.setValueAtTime(2.5, startTime);
 
   compressor.threshold.value = -24;
   compressor.knee.value = 18;
@@ -2082,63 +2104,71 @@ function playPianoFrequency(frequency, startOffset = 0, duration = 1.2, gainScal
   compressor.attack.value = 0.003;
   compressor.release.value = 0.22;
 
+  const peakGain = 0.2 * gainScale * velocityJitter;
+  const sustainGain = 0.075 * gainScale * velocityJitter;
   masterGain.gain.setValueAtTime(0.0001, startTime);
-  masterGain.gain.exponentialRampToValueAtTime(0.22 * gainScale, startTime + 0.008);
-  masterGain.gain.exponentialRampToValueAtTime(0.08 * gainScale, startTime + 0.09);
+  masterGain.gain.linearRampToValueAtTime(peakGain, startTime + 0.005);
+  masterGain.gain.exponentialRampToValueAtTime(sustainGain, startTime + 0.08);
   masterGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
-  masterGain.connect(filter);
-  filter.connect(compressor);
+  masterGain.connect(toneFilter);
+  toneFilter.connect(bodyFilter);
+  bodyFilter.connect(compressor);
   compressor.connect(context.destination);
 
   const partials = [
     {
       ratio: 1,
-      gain: 0.9,
+      gain: 0.86,
       type: "triangle",
-      detune: -2,
       release: Math.max(0.18, duration - 0.02)
     },
     {
       ratio: 2,
-      gain: 0.34,
+      gain: 0.26,
       type: "sine",
-      detune: 1,
-      release: Math.max(0.16, duration - 0.28)
+      release: Math.max(0.16, duration - 0.24)
     },
     {
       ratio: 3,
-      gain: 0.12,
+      gain: 0.09,
       type: "sine",
-      detune: -3,
-      release: Math.max(0.14, duration - 0.48)
+      release: Math.max(0.14, duration - 0.42)
     }
   ];
 
-  partials.forEach((partial) => {
+  partials.forEach((partial, index) => {
     const oscillator = context.createOscillator();
     const partialGain = context.createGain();
 
     oscillator.type = partial.type;
     oscillator.frequency.setValueAtTime(frequency * partial.ratio, startTime);
-    oscillator.detune.value = partial.detune;
+    oscillator.detune.setValueAtTime(detuneHumanize() + index * 0.6, startTime);
 
-    partialGain.gain.setValueAtTime(partial.gain * gainScale, startTime);
+    const partialPeak = partial.gain * gainScale * velocityJitter;
+    partialGain.gain.setValueAtTime(0.0001, startTime);
+    partialGain.gain.linearRampToValueAtTime(partialPeak, startTime + 0.004 + index * 0.002);
     partialGain.gain.exponentialRampToValueAtTime(0.0001, startTime + partial.release);
 
     oscillator.connect(partialGain);
     partialGain.connect(masterGain);
     oscillator.start(startTime);
-    oscillator.stop(startTime + duration + 0.02);
+    oscillator.stop(startTime + duration + 0.05);
   });
 
   const hammerOscillator = context.createOscillator();
   const hammerGain = context.createGain();
+  const hammerFilter = context.createBiquadFilter();
   hammerOscillator.type = "square";
-  hammerOscillator.frequency.setValueAtTime(frequency * 4, startTime);
-  hammerGain.gain.setValueAtTime(0.02 * gainScale, startTime);
-  hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.03);
-  hammerOscillator.connect(hammerGain);
+  hammerOscillator.frequency.setValueAtTime(frequency * 5.1, startTime);
+  hammerOscillator.detune.setValueAtTime(detuneHumanize() * 2, startTime);
+  hammerFilter.type = "bandpass";
+  hammerFilter.frequency.setValueAtTime(Math.min(6000, frequency * 8), startTime);
+  hammerFilter.Q.value = 1.4;
+  hammerGain.gain.setValueAtTime(0.03 * gainScale * velocityJitter, startTime);
+  hammerGain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.025);
+  hammerOscillator.connect(hammerFilter);
+  hammerFilter.connect(hammerGain);
   hammerGain.connect(masterGain);
   hammerOscillator.start(startTime);
   hammerOscillator.stop(startTime + 0.03);
@@ -2168,12 +2198,17 @@ function playSoundEffect(type) {
     sequence.forEach((frequency, index) => {
       const oscillator = context.createOscillator();
       const gainNode = context.createGain();
+      const filter = context.createBiquadFilter();
       oscillator.type = type === "roll" ? "triangle" : "sine";
-      oscillator.frequency.value = frequency;
+      oscillator.frequency.setValueAtTime(frequency, startTime + index * 0.08);
+      oscillator.detune.setValueAtTime((Math.random() - 0.5) * 8, startTime + index * 0.08);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(type === "roll" ? 2200 : 3000, startTime + index * 0.08);
       gainNode.gain.setValueAtTime(0.0001, startTime + index * 0.08);
-      gainNode.gain.exponentialRampToValueAtTime(0.04, startTime + index * 0.08 + 0.01);
+      gainNode.gain.linearRampToValueAtTime(0.045 + Math.random() * 0.01, startTime + index * 0.08 + 0.008);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + index * 0.08 + 0.14);
-      oscillator.connect(gainNode);
+      oscillator.connect(filter);
+      filter.connect(gainNode);
       gainNode.connect(context.destination);
       oscillator.start(startTime + index * 0.08);
       oscillator.stop(startTime + index * 0.08 + 0.15);
@@ -2234,14 +2269,14 @@ function playLockedNotes(mode) {
 
 function getDieSubtext(die) {
   if (!die.note) {
-    return die.isWild ? "Rare wildcard waiting for a roll" : "Waiting for roll";
+    return die.isWild ? "Wildcard — roll first" : "Waiting for roll";
   }
 
   if (die.locked) {
-    return die.isWild ? "Held and still tunable" : "Held for scoring";
+    return die.isWild ? "Held — tune above" : "Held for scoring";
   }
 
-  return die.isWild ? "Tap to hold or tune below" : "Tap to hold";
+  return die.isWild ? "Tap to hold" : "Tap to hold";
 }
 
 function buildDieAriaLabel(die, index) {
